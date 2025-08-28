@@ -16,12 +16,12 @@ use uuid::Uuid;
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
-    if let Err(err) = dotenv() {
-        if !err.not_found() {
-            let err = format!("Error while loading .env file: {err}");
-            error!(err);
-            return Err(anyhow::anyhow!(err));
-        }
+    if let Err(err) = dotenv()
+        && !err.not_found()
+    {
+        let err = format!("Error while loading .env file: {err}");
+        error!(err);
+        return Err(anyhow::anyhow!(err));
     }
 
     tracing_subscriber::registry()
