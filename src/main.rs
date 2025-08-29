@@ -1,17 +1,16 @@
 use std::time::Duration;
 
 use axum::{
-    Router,
     body::Body,
     extract::{MatchedPath, Request},
     http::Response,
-    routing::get,
 };
 use dotenvy::dotenv;
+use soko::{Config, app_router};
 use tokio::signal;
 use tower_http::{timeout::TimeoutLayer, trace::TraceLayer};
-use tracing::{Span, error, info, info_span};
-use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
+use tracing::{Span, error, info, info_span, level_filters::LevelFilter};
+use tracing_subscriber::{Layer, layer::SubscriberExt, util::SubscriberInitExt};
 use uuid::Uuid;
 
 #[tokio::main]
@@ -24,14 +23,23 @@ async fn main() -> Result<(), anyhow::Error> {
         return Err(anyhow::anyhow!(err));
     }
 
+    let config = match Config::build() {
+        Ok(c) => c,
+        Err(e) => {
+            let err = format!("Error while building configuration: {e}");
+            error!(err);
+            return Err(anyhow::anyhow!(err));
+        }
+    };
+
     tracing_subscriber::registry()
         .with(
-            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or(EnvFilter::new("info")),
+            tracing_subscriber::fmt::layer()
+                .with_filter(Into::<LevelFilter>::into(config.log_level)),
         )
-        .with(tracing_subscriber::fmt::layer())
         .init();
 
-    let app = Router::new().route("/health", get(healthcheck)).layer((
+    let app = app_router().layer((
         TraceLayer::new_for_http()
             .make_span_with(|request: &Request<_>| {
                 let matched_path = request
@@ -59,7 +67,7 @@ async fn main() -> Result<(), anyhow::Error> {
         TimeoutLayer::new(Duration::from_secs(10)),
     ));
 
-    let addr = "0.0.0.0:3000";
+    let addr = format!("0.0.0.0:{}", config.port);
     let listener = tokio::net::TcpListener::bind(&addr).await.map_err(|err| {
         let err = format!("Error while binding the TCP listener to address {addr}: {err}");
 
@@ -81,11 +89,6 @@ async fn main() -> Result<(), anyhow::Error> {
     info!("App has been gracefully shutdown");
 
     Ok(())
-}
-
-async fn healthcheck() -> &'static str {
-    info!("Healthcheck called");
-    "OK"
 }
 
 async fn shutdown_signal() {
