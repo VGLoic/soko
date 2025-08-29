@@ -4,14 +4,13 @@ use std::{
 };
 
 use axum::{Router, routing::get};
-use tracing::{Level, info};
+use tracing::Level;
 
 pub fn app_router() -> Router {
     Router::new().route("/health", get(healthcheck))
 }
 
 async fn healthcheck() -> &'static str {
-    info!("Healthcheck called");
     "OK"
 }
 
