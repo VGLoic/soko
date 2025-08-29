@@ -27,7 +27,7 @@ impl Config {
             Ok(v) => v.unwrap_or(3000_u16),
             Err(e) => {
                 errors.push(e.to_string());
-                0
+                3000
             }
         };
         // `LOG_LEVEL` has priority over `RUST_LOG`
@@ -37,7 +37,7 @@ impl Config {
                 .unwrap_or(Level::INFO),
             Err(e) => {
                 errors.push(e.to_string());
-                Level::DEBUG
+                Level::INFO
             }
         };
         if !errors.is_empty() {
