@@ -20,12 +20,12 @@ pub async fn setup() -> Result<TestState, anyhow::Error> {
     // This is needed in order to let our test run in parallel
     let addr = SocketAddr::from(([127, 0, 0, 1], 0));
     let listener = tokio::net::TcpListener::bind(&addr).await.map_err(|err| {
-        anyhow::anyhow!("Error while binding the TCP listener to address {addr}: {err}")
+        anyhow::anyhow!("Failed to bind the TCP listener to address {addr}: {err}")
     })?;
 
     let addr = listener.local_addr().unwrap();
 
-    info!("Successfully bind the TCP listener to address {addr}\n");
+    info!("Successfully bound the TCP listener to address {addr}\n");
 
     // Start a server, the handle is kept in order to abort it if needed
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
