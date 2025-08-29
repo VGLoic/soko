@@ -49,6 +49,7 @@ where
         Some(v) => v.parse::<T>().map_err(anyhow::Error::from).map(|v| Some(v)),
         None => Ok(None),
     }
+    .map_err(|e| anyhow::anyhow!("{key}: {e}"))
 }
 
 fn read_optional_env_variable(key: &str) -> Result<Option<String>, anyhow::Error> {
