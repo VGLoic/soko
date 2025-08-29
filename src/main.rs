@@ -18,17 +18,13 @@ async fn main() -> Result<(), anyhow::Error> {
     if let Err(err) = dotenv()
         && !err.not_found()
     {
-        let err = format!("Error while loading .env file: {err}");
-        error!(err);
-        return Err(anyhow::anyhow!(err));
+        return Err(anyhow::anyhow!("Error while loading .env file: {err}"));
     }
 
     let config = match Config::build() {
         Ok(c) => c,
         Err(e) => {
-            let err = format!("Error while building configuration: {e}");
-            error!(err);
-            return Err(anyhow::anyhow!(err));
+            return Err(anyhow::anyhow!("Error while building configuration: {e}"));
         }
     };
 
