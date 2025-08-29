@@ -1,17 +1,22 @@
+use serde::{Deserialize, Serialize};
 use std::{
     env::{self, VarError},
     str::FromStr,
 };
 
-use axum::{Router, routing::get};
+use axum::{Json, Router, routing::get};
 use tracing::Level;
 
 pub fn app_router() -> Router {
     Router::new().route("/health", get(healthcheck))
 }
 
-async fn healthcheck() -> &'static str {
-    "OK"
+#[derive(Serialize, Deserialize)]
+pub struct Healthcheck {
+    pub ok: bool,
+}
+async fn healthcheck() -> Json<Healthcheck> {
+    Json(Healthcheck { ok: true })
 }
 
 pub struct Config {

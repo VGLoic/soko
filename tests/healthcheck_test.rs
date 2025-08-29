@@ -3,7 +3,7 @@ use axum::{
     http::{Request, StatusCode},
 };
 use http_body_util::BodyExt;
-use soko::app_router;
+use soko::{Healthcheck, app_router};
 use tower::ServiceExt;
 
 #[tokio::test]
@@ -22,6 +22,8 @@ async fn test_healthcheck() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
+
     let body = response.into_body().collect().await.unwrap().to_bytes();
-    assert_eq!(&body[..], b"OK");
+    let body: Healthcheck = serde_json::from_slice(&body).unwrap();
+    assert!(body.ok);
 }
