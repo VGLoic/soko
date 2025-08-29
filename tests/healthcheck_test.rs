@@ -1,29 +1,15 @@
-use axum::{
-    body::Body,
-    http::{Request, StatusCode},
-};
-use http_body_util::BodyExt;
-use soko::{Healthcheck, app_router};
-use tower::ServiceExt;
+use axum::http::StatusCode;
+use soko::Healthcheck;
+
+mod common;
 
 #[tokio::test]
 async fn test_healthcheck() {
-    let app = app_router();
+    let test_state = common::setup().await.unwrap();
 
-    let response = app
-        .oneshot(
-            Request::builder()
-                .method("GET")
-                .uri("/health")
-                .body(Body::empty())
-                .unwrap(),
-        )
+    let response = reqwest::get(format!("{}/health", &test_state.server_url))
         .await
         .unwrap();
-
     assert_eq!(response.status(), StatusCode::OK);
-
-    let body = response.into_body().collect().await.unwrap().to_bytes();
-    let body: Healthcheck = serde_json::from_slice(&body).unwrap();
-    assert!(body.ok);
+    assert!(response.json::<Healthcheck>().await.unwrap().ok);
 }

@@ -1,28 +1,13 @@
-use axum::{
-    body::Body,
-    http::{Request, StatusCode},
-};
-use http_body_util::BodyExt;
-use soko::app_router;
-use tower::ServiceExt;
+use axum::http::StatusCode;
+mod common;
 
 #[tokio::test]
 async fn test_not_found() {
-    let app = app_router();
+    let test_state = common::setup().await.unwrap();
 
-    let response = app
-        .oneshot(
-            Request::builder()
-                .method("GET")
-                .uri("/unknown-route")
-                .body(Body::empty())
-                .unwrap(),
-        )
+    let response = reqwest::get(format!("{}/unknown-route", &test_state.server_url))
         .await
         .unwrap();
-
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
-
-    let body = response.into_body().collect().await.unwrap().to_bytes();
-    assert!(body.is_empty());
+    assert!(response.bytes().await.unwrap().is_empty());
 }
