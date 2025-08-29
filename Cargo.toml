@@ -7,8 +7,11 @@ edition = "2024"
 anyhow = "1.0.99"
 axum = "0.8.4"
 dotenvy = "0.15.7"
-serde = "1.0.219"
+reqwest = { version = "0.12.23", features = ["json"] }
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.143"
 tokio = { version = "1.47.1", features = ["full"] }
+tower = "0.5.2"
 tower-http = { version = "0.6.6", features = ["timeout", "trace"] }
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
