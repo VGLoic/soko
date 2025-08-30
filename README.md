@@ -57,6 +57,18 @@ To get started with local development, you'll need to set up your environment. F
 
 4. Verify that the integration tests are running:
     ```bash
-    docker compose -f compose.integration.yml up
+    docker compose -f compose.integration.yaml up
     cargo test --test integration
+    # Once the integration tests have finished
+    docker compose -f compose.integration.yaml down -v
+    ```
+
+5. Launch the database locally:
+    ```bash
+    docker compose up
+    ```
+
+7. Run the application
+    ```bash
+    cargo run .
     ```
