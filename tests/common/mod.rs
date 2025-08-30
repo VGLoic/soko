@@ -28,10 +28,10 @@ pub async fn setup() -> Result<TestState, anyhow::Error> {
         .await
         .map_err(|e| anyhow::anyhow!("Fail to establish connection to database: {e}"))?;
 
-    sqlx::migrate!("db/migrations")
+    sqlx::migrate!("./migrations")
         .run(&pool)
         .await
-        .map_err(|e| anyhow::anyhow!("Fail to run database migration: {e}"))?;
+        .map_err(|e| anyhow::anyhow!("Fail to run database migrations: {e}"))?;
 
     let app = app_router().layer(TraceLayer::new_for_http());
 

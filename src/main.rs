@@ -50,8 +50,8 @@ async fn main() -> Result<(), anyhow::Error> {
         }
     };
 
-    if let Err(e) = sqlx::migrate!("db/migrations").run(&pool).await {
-        let err = format!("Fail to execute database migrations: {e}");
+    if let Err(e) = sqlx::migrate!("./migrations").run(&pool).await {
+        let err = format!("Fail to run database migrations: {e}");
         error!(err);
         return Err(anyhow::anyhow!(err));
     };
