@@ -45,23 +45,13 @@ impl Config {
                 Level::INFO
             }
         };
-        let database_ssl_require = match parse_env_variable::<bool>("DATABASE_SSL_REQUIRE") {
-            Ok(v) => v.unwrap_or(false),
-            Err(e) => {
-                errors.push(e.to_string());
-                false
-            }
-        };
-        let mut database_url = match parse_required_env_variable::<String>("DATABASE_URL") {
+        let database_url = match parse_required_env_variable::<String>("DATABASE_URL") {
             Ok(v) => v,
             Err(e) => {
                 errors.push(e.to_string());
                 "".to_string()
             }
         };
-        if database_ssl_require {
-            database_url += "?ssl_mode=require"
-        }
         if !errors.is_empty() {
             return Err(anyhow::anyhow!(errors.join(", ")));
         }

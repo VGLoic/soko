@@ -7,6 +7,7 @@ use axum::{
 };
 use dotenvy::dotenv;
 use soko::{Config, app_router};
+use sqlx::postgres::PgPoolOptions;
 use tokio::signal;
 use tower_http::{timeout::TimeoutLayer, trace::TraceLayer};
 use tracing::{Span, error, info, info_span, level_filters::LevelFilter};
@@ -34,6 +35,28 @@ async fn main() -> Result<(), anyhow::Error> {
                 .with_filter(Into::<LevelFilter>::into(config.log_level)),
         )
         .init();
+
+    let pool = match PgPoolOptions::new()
+        .max_connections(5)
+        .acquire_timeout(Duration::from_secs(5))
+        .connect(&config.database_url)
+        .await
+    {
+        Ok(c) => c,
+        Err(e) => {
+            let err = format!("Fail to establish connection to database {e}");
+            error!(err);
+            return Err(anyhow::anyhow!(err));
+        }
+    };
+
+    if let Err(e) = sqlx::migrate!("db/migrations").run(&pool).await {
+        let err = format!("Fail to execute database migrations: {e}");
+        error!(err);
+        return Err(anyhow::anyhow!(err));
+    };
+
+    info!("Successfully ran migrations");
 
     let app = app_router().layer((
         TraceLayer::new_for_http()

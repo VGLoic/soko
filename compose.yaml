@@ -1,0 +1,33 @@
+# Comments are provided throughout this file to help you get started.
+# If you need more help, visit the Docker Compose reference guide at
+# https://docs.docker.com/go/compose-spec-reference/
+
+services:
+  db:
+    image: postgres
+    restart: always
+    user: postgres
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    environment:
+      # If environment is modified
+      # One also needs to change the healthcheck command below as it uses these values
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=admin
+      - POSTGRES_DB=soko
+      - POSTGRES_HOST=localhost
+      - POSTGRES_PORT=5432
+    ports:
+      - 5432:5432
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-U", "admin", "-d", "soko" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - soko-app
+volumes:
+  db-data:
+networks:
+  soko-app:
+

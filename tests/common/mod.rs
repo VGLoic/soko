@@ -1,8 +1,9 @@
-use std::net::SocketAddr;
+use std::{net::SocketAddr, time::Duration};
 
-use soko::app_router;
+use soko::{Config, app_router};
+use sqlx::postgres::PgPoolOptions;
 use tower_http::trace::TraceLayer;
-use tracing::{info, level_filters::LevelFilter};
+use tracing::{Level, info, level_filters::LevelFilter};
 use tracing_subscriber::{Layer, layer::SubscriberExt, util::SubscriberInitExt};
 
 pub struct TestState {
@@ -11,8 +12,26 @@ pub struct TestState {
 
 pub async fn setup() -> Result<TestState, anyhow::Error> {
     let _ = tracing_subscriber::registry()
-        .with(tracing_subscriber::fmt::layer().with_filter(LevelFilter::DEBUG))
+        .with(tracing_subscriber::fmt::layer().with_filter(LevelFilter::TRACE))
         .try_init();
+
+    let config = Config {
+        port: 0,
+        log_level: Level::TRACE,
+        database_url: "postgresql://admin:admin@localhost:5433/soko".to_string(),
+    };
+
+    let pool = PgPoolOptions::new()
+        .max_connections(5)
+        .acquire_timeout(Duration::from_secs(5))
+        .connect(&config.database_url)
+        .await
+        .map_err(|e| anyhow::anyhow!("Fail to establish connection to database: {e}"))?;
+
+    sqlx::migrate!("db/migrations")
+        .run(&pool)
+        .await
+        .map_err(|e| anyhow::anyhow!("Fail to run database migration: {e}"))?;
 
     let app = app_router().layer(TraceLayer::new_for_http());
 
