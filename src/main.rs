@@ -44,14 +44,14 @@ async fn main() -> Result<(), anyhow::Error> {
     {
         Ok(c) => c,
         Err(e) => {
-            let err = format!("Fail to establish connection to database {e}");
+            let err = format!("Failed to establish connection to database {e}");
             error!(err);
             return Err(anyhow::anyhow!(err));
         }
     };
 
     if let Err(e) = sqlx::migrate!("./migrations").run(&pool).await {
-        let err = format!("Fail to run database migrations: {e}");
+        let err = format!("Failed to run database migrations: {e}");
         error!(err);
         return Err(anyhow::anyhow!(err));
     };

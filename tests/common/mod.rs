@@ -10,6 +10,8 @@ pub struct TestState {
     pub server_url: String,
 }
 
+const INTEGRATION_DATABASE_URL: &str = "postgresql://admin:admin@localhost:5433/soko";
+
 pub async fn setup() -> Result<TestState, anyhow::Error> {
     let _ = tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer().with_filter(LevelFilter::TRACE))
@@ -18,7 +20,7 @@ pub async fn setup() -> Result<TestState, anyhow::Error> {
     let config = Config {
         port: 0,
         log_level: Level::TRACE,
-        database_url: "postgresql://admin:admin@localhost:5433/soko".to_string(),
+        database_url: INTEGRATION_DATABASE_URL.to_string(),
     };
 
     let pool = PgPoolOptions::new()
@@ -26,12 +28,12 @@ pub async fn setup() -> Result<TestState, anyhow::Error> {
         .acquire_timeout(Duration::from_secs(5))
         .connect(&config.database_url)
         .await
-        .map_err(|e| anyhow::anyhow!("Fail to establish connection to database: {e}"))?;
+        .map_err(|e| anyhow::anyhow!("Failed to establish connection to database: {e}"))?;
 
     sqlx::migrate!("./migrations")
         .run(&pool)
         .await
-        .map_err(|e| anyhow::anyhow!("Fail to run database migrations: {e}"))?;
+        .map_err(|e| anyhow::anyhow!("Failed to run database migrations: {e}"))?;
 
     let app = app_router().layer(TraceLayer::new_for_http());
 
