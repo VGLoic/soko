@@ -65,50 +65,50 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let x_request_id = HeaderName::from_static(REQUEST_ID_HEADER);
 
-    let app = app_router()
-        .layer(SetRequestIdLayer::new(
-            x_request_id.clone(),
-            MakeRequestUuid,
-        ))
-        .layer(
-            TraceLayer::new_for_http()
-                .make_span_with(|request: &Request<_>| {
-                    let matched_path = request
-                        .extensions()
-                        .get::<MatchedPath>()
-                        .map(MatchedPath::as_str);
+    let app = app_router().layer((
+        // Set `x-request-id` header for every request
+        SetRequestIdLayer::new(x_request_id.clone(), MakeRequestUuid),
+        // Log request and response
+        TraceLayer::new_for_http()
+            .make_span_with(|request: &Request<_>| {
+                let matched_path = request
+                    .extensions()
+                    .get::<MatchedPath>()
+                    .map(MatchedPath::as_str);
 
-                    let request_id = request.headers().get(REQUEST_ID_HEADER);
+                let request_id = request.headers().get(REQUEST_ID_HEADER);
 
-                    match request_id {
-                        Some(v) => info_span!(
+                match request_id {
+                    Some(v) => info_span!(
+                        "http_request",
+                        method = ?request.method(),
+                        matched_path,
+                        request_id = ?v
+                    ),
+                    None => {
+                        error!("Failed to extract `request_id` header");
+                        info_span!(
                             "http_request",
                             method = ?request.method(),
                             matched_path,
-                            request_id = ?v
-                        ),
-                        None => {
-                            error!("Failed to extract `request_id` header");
-                            info_span!(
-                                "http_request",
-                                method = ?request.method(),
-                                matched_path,
-                            )
-                        }
+                        )
                     }
-                })
-                .on_response(
-                    |response: &Response<Body>, latency: Duration, _span: &Span| {
-                        if response.status().is_server_error() {
-                            error!("response: {} {latency:?}", response.status())
-                        } else {
-                            info!("response: {} {latency:?}", response.status())
-                        }
-                    },
-                ),
-        )
-        .layer(TimeoutLayer::new(Duration::from_secs(10)))
-        .layer(PropagateRequestIdLayer::new(x_request_id));
+                }
+            })
+            .on_response(
+                |response: &Response<Body>, latency: Duration, _span: &Span| {
+                    if response.status().is_server_error() {
+                        error!("response: {} {latency:?}", response.status())
+                    } else {
+                        info!("response: {} {latency:?}", response.status())
+                    }
+                },
+            ),
+        // Timeout requests at 10 seconds
+        TimeoutLayer::new(Duration::from_secs(10)),
+        // Propagate the `x-request-id` header to responses
+        PropagateRequestIdLayer::new(x_request_id),
+    ));
 
     let addr = format!("0.0.0.0:{}", config.port);
     let listener = tokio::net::TcpListener::bind(&addr).await.map_err(|err| {
