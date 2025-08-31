@@ -1,8 +1,11 @@
 use axum::{Json, Router, http::StatusCode, response::IntoResponse, routing::get};
 use serde::{Deserialize, Serialize};
+mod account;
+pub use account::{AccountResponse, SignupPayload};
 
 pub fn app_router() -> Router {
     Router::new()
+        .merge(account::router())
         .route("/health", get(get_healthcheck))
         .fallback(not_found_handler)
 }
