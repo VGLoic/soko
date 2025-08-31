@@ -16,5 +16,5 @@ async fn get_healthcheck() -> (StatusCode, Json<GetHealthcheckResponse>) {
 }
 
 async fn not_found_handler() -> impl IntoResponse {
-    (StatusCode::NOT_FOUND, "Page not found")
+    (StatusCode::NOT_FOUND, "Not found")
 }

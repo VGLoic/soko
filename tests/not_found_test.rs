@@ -9,5 +9,5 @@ async fn test_not_found() {
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
-    assert!(response.bytes().await.unwrap().is_empty());
+    assert_eq!(response.text().await.unwrap(), "Not found");
 }
