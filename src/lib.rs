@@ -85,7 +85,7 @@ where
     {
         anyhow::anyhow!("[{key}]: {e}")
     }
-    
+
     let env_value = match env::var(key) {
         Ok(v) => {
             if v.is_empty() {
