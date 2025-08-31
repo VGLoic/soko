@@ -6,7 +6,7 @@ use axum::{
     http::Response,
 };
 use dotenvy::dotenv;
-use soko::{Config, app_router};
+use soko::{Config, routes::app_router};
 use sqlx::postgres::PgPoolOptions;
 use tokio::signal;
 use tower_http::{timeout::TimeoutLayer, trace::TraceLayer};
