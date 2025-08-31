@@ -3,16 +3,21 @@ use std::time::Duration;
 use axum::{
     body::Body,
     extract::{MatchedPath, Request},
-    http::Response,
+    http::{HeaderName, Response},
 };
 use dotenvy::dotenv;
-use soko::{Config, app_router};
+use soko::{Config, routes::app_router};
 use sqlx::postgres::PgPoolOptions;
 use tokio::signal;
-use tower_http::{timeout::TimeoutLayer, trace::TraceLayer};
+use tower_http::{
+    request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer},
+    timeout::TimeoutLayer,
+    trace::TraceLayer,
+};
 use tracing::{Span, error, info, info_span, level_filters::LevelFilter};
 use tracing_subscriber::{Layer, layer::SubscriberExt, util::SubscriberInitExt};
-use uuid::Uuid;
+
+const REQUEST_ID_HEADER: &str = "x-request-id";
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
@@ -58,33 +63,52 @@ async fn main() -> Result<(), anyhow::Error> {
 
     info!("Successfully ran migrations");
 
-    let app = app_router().layer((
-        TraceLayer::new_for_http()
-            .make_span_with(|request: &Request<_>| {
-                let matched_path = request
-                    .extensions()
-                    .get::<MatchedPath>()
-                    .map(MatchedPath::as_str);
+    let x_request_id = HeaderName::from_static(REQUEST_ID_HEADER);
 
-                let request_id = Uuid::new_v4();
-                info_span!(
-                    "http_request",
-                    method = ?request.method(),
-                    matched_path,
-                    request_id = %request_id
-                )
-            })
-            .on_response(
-                |response: &Response<Body>, latency: Duration, _span: &Span| {
-                    if response.status().is_server_error() {
-                        error!("response: {} {latency:?}", response.status())
-                    } else {
-                        info!("response: {} {latency:?}", response.status())
+    let app = app_router()
+        .layer(SetRequestIdLayer::new(
+            x_request_id.clone(),
+            MakeRequestUuid,
+        ))
+        .layer(
+            TraceLayer::new_for_http()
+                .make_span_with(|request: &Request<_>| {
+                    let matched_path = request
+                        .extensions()
+                        .get::<MatchedPath>()
+                        .map(MatchedPath::as_str);
+
+                    let request_id = request.headers().get(REQUEST_ID_HEADER);
+
+                    match request_id {
+                        Some(v) => info_span!(
+                            "http_request",
+                            method = ?request.method(),
+                            matched_path,
+                            request_id = ?v
+                        ),
+                        None => {
+                            error!("Failed to extract `request_id` header");
+                            info_span!(
+                                "http_request",
+                                method = ?request.method(),
+                                matched_path,
+                            )
+                        }
                     }
-                },
-            ),
-        TimeoutLayer::new(Duration::from_secs(10)),
-    ));
+                })
+                .on_response(
+                    |response: &Response<Body>, latency: Duration, _span: &Span| {
+                        if response.status().is_server_error() {
+                            error!("response: {} {latency:?}", response.status())
+                        } else {
+                            info!("response: {} {latency:?}", response.status())
+                        }
+                    },
+                ),
+        )
+        .layer(TimeoutLayer::new(Duration::from_secs(10)))
+        .layer(PropagateRequestIdLayer::new(x_request_id));
 
     let addr = format!("0.0.0.0:{}", config.port);
     let listener = tokio::net::TcpListener::bind(&addr).await.map_err(|err| {

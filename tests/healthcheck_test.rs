@@ -1,5 +1,5 @@
 use axum::http::StatusCode;
-use soko::Healthcheck;
+use soko::routes::GetHealthcheckResponse;
 
 mod common;
 
@@ -11,5 +11,5 @@ async fn test_healthcheck() {
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
-    assert!(response.json::<Healthcheck>().await.unwrap().ok);
+    assert!(response.json::<GetHealthcheckResponse>().await.unwrap().ok);
 }

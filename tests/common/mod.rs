@@ -1,6 +1,6 @@
 use std::{net::SocketAddr, time::Duration};
 
-use soko::{Config, app_router};
+use soko::{Config, routes::app_router};
 use sqlx::postgres::PgPoolOptions;
 use tower_http::trace::TraceLayer;
 use tracing::{Level, info, level_filters::LevelFilter};
