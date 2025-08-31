@@ -79,21 +79,14 @@ where
     T: FromStr,
     <T as FromStr>::Err: std::error::Error + Send + Sync + 'static,
 {
-    match read_env_variable(key)? {
-        Some(v) => {
-            if v.is_empty() {
-                Ok(None)
-            } else {
-                v.parse::<T>().map_err(anyhow::Error::from).map(|v| Some(v))
-            }
-        }
-        None => Ok(None),
+    fn map_err<E>(key: &str, e: E) -> anyhow::Error
+    where
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        anyhow::anyhow!("[{key}]: {e}")
     }
-    .map_err(|e| anyhow::anyhow!("[{key}]: {e}"))
-}
-
-fn read_env_variable(key: &str) -> Result<Option<String>, anyhow::Error> {
-    match env::var(key) {
+    
+    let env_value = match env::var(key) {
         Ok(v) => {
             if v.is_empty() {
                 Ok(None)
@@ -105,8 +98,11 @@ fn read_env_variable(key: &str) -> Result<Option<String>, anyhow::Error> {
             if e == VarError::NotPresent {
                 Ok(None)
             } else {
-                Err(e.into())
+                Err(map_err(key, e))
             }
         }
-    }
+    }?;
+    env_value
+        .map(|v| v.parse::<T>().map_err(|e| map_err(key, e)))
+        .transpose()
 }
