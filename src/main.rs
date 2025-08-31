@@ -27,10 +27,12 @@ async fn main() -> Result<(), anyhow::Error> {
         return Err(anyhow::anyhow!("Error while loading .env file: {err}"));
     }
 
-    let config = match Config::build() {
+    let config = match Config::parse_environment() {
         Ok(c) => c,
         Err(e) => {
-            return Err(anyhow::anyhow!("Error while building configuration: {e}"));
+            return Err(anyhow::anyhow!(
+                "Failed to parse environment variables for configuration: {e}"
+            ));
         }
     };
 

@@ -13,7 +13,7 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn build() -> Result<Config, anyhow::Error> {
+    pub fn parse_environment() -> Result<Config, anyhow::Error> {
         let mut errors: Vec<String> = vec![];
         let port = match parse_env_variable("PORT") {
             Ok(v) => v.unwrap_or(3000_u16),
