@@ -27,3 +27,36 @@ async fn test_account_signup() {
         email
     );
 }
+
+#[tokio::test]
+async fn test_account_signup_two_successive_times() {
+    let test_state = common::setup().await.unwrap();
+
+    let email: String = faker::internet::en::SafeEmail().fake();
+    let password = "1234abcd5678".to_owned();
+
+    let client = reqwest::Client::new();
+    let response = client
+        .post(format!("{}/accounts/signup", &test_state.server_url))
+        .json(&SignupPayload {
+            email: email.clone(),
+            password,
+        })
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    let updated_password = "abcdefgh1234".to_owned();
+
+    let response = client
+        .post(format!("{}/accounts/signup", &test_state.server_url))
+        .json(&SignupPayload {
+            email: email.clone(),
+            password: updated_password,
+        })
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+}
