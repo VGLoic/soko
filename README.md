@@ -92,6 +92,152 @@ chmod +x scripts/integration-test.sh
 ./scripts/integration-test.sh
 ```
 
+### Domain implementation
+
+The routes are split in various business domains. A domain is meant to be contained as much as possible.
+
+Implementation of a domain must follow a set of rules:
+- the domain must expose its own router factory, exposing its routes,
+    ```rust
+    pub fn account_router() -> Router<AppState> {
+        Router::new().route("/signup", post(signup_account))
+    }
+    ```
+- the domain defines one or multiple entities in order to define it. These entities are implemented as Rust structures,
+    ```rust
+    #[derive(FromRow)]
+    pub struct Account {
+        pub id: uuid::Uuid,
+        pub email: String,
+        pub password_hash: String,
+        pub email_verified: bool,
+        pub created_at: DateTime<Utc>,
+        pub updated_at: DateTime<Utc>,
+    }
+    ```
+- each domain entity must implement its set of methods in order to define what business rules are allowed for this entity. We define this collection of methods the `entity model`,
+    ```rust
+    impl Account {
+        /// Update the password hash of an account
+        ///
+        /// # Arguments
+        /// * `password` - Updated password to be hashed
+        pub fn update_password_hash(&mut self, password: &str) -> &mut Self {
+            self.password_hash = Self::hash_password(password);
+            self.updated_at = Utc::now();
+            self
+        }
+    }
+    ```
+- if needed, the domain must define a `repository` in order to abstract the database interactions related to the domain entities. This repository must be exposed as a documented `trait` and have its own errors defined as an `enum`,
+    ```rust
+    #[async_trait]
+    pub trait AccountRepository: Send + Sync {
+        /// Get an account by email
+        ///
+        /// # Arguments
+        /// * `email` - Email of the account
+        ///
+        /// # Errors
+        /// - `Unclassified`: fallback error type
+        async fn get_account_by_email(
+            &self,
+            email: &str,
+        ) -> Result<Option<Account>, AccountRepositoryError>;
+
+        /// Update an account identified by its ID
+        ///
+        /// # Arguments
+        /// * `account` - Updated account,
+        ///
+        /// # Errors
+        /// - `AccountNotFound`: account not found
+        /// - `Unclassified`: fallback error type
+        async fn update_account(&self, account: &Account) -> Result<(), AccountRepositoryError>;
+
+        /// Crate an account
+        ///
+        /// # Arguments
+        /// * `email` - Email of the account,
+        /// * `password_hash` - Hash of the password
+        ///
+        /// # Errors
+        /// - `AccountNotFound`: account not found after creation
+        /// - `Unclassified`: fallback error type
+        async fn create_account(
+            &self,
+            email: &str,
+            password_hash: &str,
+        ) -> Result<Account, AccountRepositoryError>;
+    }
+
+    #[derive(Error, Debug)]
+    pub enum AccountRepositoryError {
+        #[error(transparent)]
+        Unclassified(#[from] anyhow::Error),
+        #[error("Account not found using search param: {0}")]
+        AccountNotFound(String),
+    }
+    ```
+- each route handler must be defined in a dedicated handler function. A handler function returns a result of the form `Result<(StatusCode, Json<ResponseType>), DomainRouteError>`,
+    ```rust
+    async fn signup_account(
+        State(app_state): State<AppState>,
+        ValidatedJson(payload): ValidatedJson<SignupPayload>,
+    ) -> Result<(StatusCode, Json<AccountResponse>), AccountError> {
+        ...
+    ```
+- the domain route errors must be defined as an enum that implements the `IntoResponse` trait of `axum`,
+    ```rust
+    #[derive(Error, Debug)]
+    pub enum AccountError {
+        #[error(transparent)]
+        Unclassified(#[from] anyhow::Error),
+        #[error("A verified account already exist for the email: {0}")]
+        AccountAlreadyVerified(String),
+    }
+
+    impl IntoResponse for AccountError {
+        fn into_response(self) -> axum::response::Response {
+            error!("{self}");
+            match self {
+                Self::Unclassified(_) => {
+                    (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error").into_response()
+                }
+                Self::AccountAlreadyVerified(_) => {
+                    let mut errors = ValidationErrors::new();
+                    errors.add(
+                        "email",
+                        ValidationError::new("existing-email")
+                            .with_message("Email is already used for another account".into()),
+                    );
+                    (StatusCode::BAD_REQUEST, Json(errors)).into_response()
+                }
+            }
+        }
+    }
+    ```
+- the response type must be serializable in JSON format, the handlers must try to have response type as close as possible if applicable
+    ```rust
+    #[derive(Debug, Serialize, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct AccountResponse {
+        pub email: String,
+        pub created_at: DateTime<Utc>,
+        pub updated_at: DateTime<Utc>,
+    }
+
+    impl From<model::Account> for AccountResponse {
+        fn from(value: model::Account) -> Self {
+            AccountResponse {
+                email: value.email,
+                created_at: value.created_at,
+                updated_at: value.updated_at,
+            }
+        }
+    }
+    ```
+
 ### Database interaction and migration
 
 Soko uses [`sqlx`](https://github.com/launchbadge/sqlx) for database connectivity and migrations.
