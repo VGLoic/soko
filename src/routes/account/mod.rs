@@ -1,6 +1,7 @@
 use axum::{
-    Json, Router,
+    Extension, Json, Router,
     extract::{FromRequest, State},
+    handler::Handler,
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::post,
@@ -17,8 +18,25 @@ pub use repository::{AccountRepository, PostgresAccountRepository};
 
 use super::AppState;
 
-pub fn account_router() -> Router<AppState> {
-    Router::new().route("/signup", post(signup_account))
+pub fn account_router(password_salt: &str) -> Router<AppState> {
+    let password_hasher = PasswordHasher {
+        password_salt: password_salt.to_string(),
+    };
+    Router::new().route(
+        "/signup",
+        post(signup_account.layer(Extension(password_hasher))),
+    )
+}
+
+#[derive(Clone, Debug)]
+struct PasswordHasher {
+    password_salt: String,
+}
+
+impl PasswordHasher {
+    fn hash_password(&self, password: &str) -> String {
+        format!("{password}:{}", self.password_salt)
+    }
 }
 
 // ############################################
@@ -94,6 +112,7 @@ pub struct SignupPayload {
 
 async fn signup_account(
     State(app_state): State<AppState>,
+    Extension(password_hasher): Extension<PasswordHasher>,
     ValidatedJson(payload): ValidatedJson<SignupPayload>,
 ) -> Result<(StatusCode, Json<AccountResponse>), AccountError> {
     if let Some(mut existing_account) = app_state
@@ -106,7 +125,7 @@ async fn signup_account(
             return Err(AccountError::AccountAlreadyVerified(existing_account.email));
         }
 
-        existing_account.update_password_hash(&payload.password);
+        existing_account.update_password_hash(password_hasher.hash_password(&payload.password));
 
         app_state
             .account_repository
@@ -121,7 +140,7 @@ async fn signup_account(
         .account_repository
         .create_account(
             &payload.email,
-            &model::Account::hash_password(&payload.password),
+            &password_hasher.hash_password(&payload.password),
         )
         .await
         .map_err(anyhow::Error::from)?;

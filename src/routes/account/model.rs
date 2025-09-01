@@ -15,18 +15,10 @@ impl Account {
     /// Update the password hash of an account
     ///
     /// # Arguments
-    /// * `password` - Updated password to be hashed
-    pub fn update_password_hash(&mut self, password: &str) -> &mut Self {
-        self.password_hash = Self::hash_password(password);
+    /// * `password_hash` - Updated password hash
+    pub fn update_password_hash(&mut self, password_hash: String) -> &mut Self {
+        self.password_hash = password_hash;
         self.updated_at = Utc::now();
         self
-    }
-
-    /// Hash a password
-    ///
-    /// # Arguments
-    /// * `password` - Password to be hashed
-    pub fn hash_password(password: &str) -> String {
-        format!("{password}1234")
     }
 }

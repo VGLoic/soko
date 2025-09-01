@@ -72,7 +72,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let account_repository = PostgresAccountRepository::from(pool);
 
-    let app = app_router(account_repository).layer((
+    let app = app_router(&config, account_repository).layer((
         // Set `x-request-id` header for every request
         SetRequestIdLayer::new(x_request_id.clone(), MakeRequestUuid),
         // Log request and response

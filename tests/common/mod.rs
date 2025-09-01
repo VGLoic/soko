@@ -24,6 +24,7 @@ pub async fn setup() -> Result<TestState, anyhow::Error> {
         port: 0,
         log_level: Level::TRACE,
         database_url: INTEGRATION_DATABASE_URL.to_string(),
+        password_salt: "abc123".to_string(),
     };
 
     let pool = PgPoolOptions::new()
@@ -40,7 +41,7 @@ pub async fn setup() -> Result<TestState, anyhow::Error> {
 
     let account_repository = PostgresAccountRepository::from(pool);
 
-    let app = app_router(account_repository).layer(TraceLayer::new_for_http());
+    let app = app_router(&config, account_repository).layer(TraceLayer::new_for_http());
 
     // Giving 0 as port here will let the system dynamically find an available port
     // This is needed in order to let our test run in parallel

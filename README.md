@@ -152,9 +152,9 @@ Implementation of a domain must follow a set of rules:
         /// Update the password hash of an account
         ///
         /// # Arguments
-        /// * `password` - Updated password to be hashed
-        pub fn update_password_hash(&mut self, password: &str) -> &mut Self {
-            self.password_hash = Self::hash_password(password);
+        /// * `password_hash` - Updated password hash
+        pub fn update_password_hash(&mut self, password_hash: String) -> &mut Self {
+            self.password_hash = password_hash;
             self.updated_at = Utc::now();
             self
         }
