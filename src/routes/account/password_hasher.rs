@@ -1,4 +1,4 @@
-use base64ct::Encoding;
+use base64ct::{Base64, Encoding};
 use sha2::{Digest, Sha256};
 
 #[derive(Clone, Debug)]
@@ -24,6 +24,6 @@ impl PasswordHasher {
         hasher.update(&self.salt);
         let hash = hasher.finalize();
 
-        base64ct::Base64::encode_string(&hash)
+        Base64::encode_string(&hash)
     }
 }
