@@ -6,7 +6,10 @@ use axum::{
     http::{HeaderName, Response},
 };
 use dotenvy::dotenv;
-use soko::{Config, routes::app_router};
+use soko::{
+    Config,
+    routes::{PostgresAccountRepository, app_router},
+};
 use sqlx::postgres::PgPoolOptions;
 use tokio::signal;
 use tower_http::{
@@ -67,7 +70,9 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let x_request_id = HeaderName::from_static(REQUEST_ID_HEADER);
 
-    let app = app_router().layer((
+    let account_repository = PostgresAccountRepository::from(pool);
+
+    let app = app_router(account_repository).layer((
         // Set `x-request-id` header for every request
         SetRequestIdLayer::new(x_request_id.clone(), MakeRequestUuid),
         // Log request and response

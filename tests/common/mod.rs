@@ -1,6 +1,9 @@
 use std::{net::SocketAddr, time::Duration};
 
-use soko::{Config, routes::app_router};
+use soko::{
+    Config,
+    routes::{PostgresAccountRepository, app_router},
+};
 use sqlx::postgres::PgPoolOptions;
 use tower_http::trace::TraceLayer;
 use tracing::{Level, info, level_filters::LevelFilter};
@@ -35,7 +38,9 @@ pub async fn setup() -> Result<TestState, anyhow::Error> {
         .await
         .map_err(|e| anyhow::anyhow!("Failed to run database migrations: {e}"))?;
 
-    let app = app_router().layer(TraceLayer::new_for_http());
+    let account_repository = PostgresAccountRepository::from(pool);
+
+    let app = app_router(account_repository).layer(TraceLayer::new_for_http());
 
     // Giving 0 as port here will let the system dynamically find an available port
     // This is needed in order to let our test run in parallel
