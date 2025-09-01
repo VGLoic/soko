@@ -6,10 +6,8 @@ use axum::{
     response::{IntoResponse, Response},
     routing::post,
 };
-use base64ct::Encoding;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
-use sha2::{Digest, Sha256};
 use thiserror::Error;
 use tracing::{error, warn};
 use validator::{Validate, ValidationError, ValidationErrors};
@@ -19,35 +17,14 @@ mod repository;
 pub use repository::{AccountRepository, PostgresAccountRepository};
 
 use super::AppState;
+mod password_hasher;
 
 pub fn account_router(password_salt: &str) -> Router<AppState> {
-    let password_hasher = PasswordHasher {
-        password_salt: password_salt.to_string(),
-    };
+    let password_hasher = password_hasher::PasswordHasher::new(password_salt.to_string());
     Router::new().route(
         "/signup",
         post(signup_account.layer(Extension(password_hasher))),
     )
-}
-
-#[derive(Clone, Debug)]
-struct PasswordHasher {
-    password_salt: String,
-}
-
-impl PasswordHasher {
-    /// Hash a password and a salt using SHA256, the hash is returned as base64 encoded string
-    ///
-    /// # Arguments
-    /// * `password` - Password to hash
-    fn hash_password(&self, password: &str) -> String {
-        let mut hasher = Sha256::new();
-        hasher.update(password);
-        hasher.update(&self.password_salt);
-        let hash = hasher.finalize();
-
-        base64ct::Base64::encode_string(&hash)
-    }
 }
 
 // ############################################
@@ -123,7 +100,7 @@ pub struct SignupPayload {
 
 async fn signup_account(
     State(app_state): State<AppState>,
-    Extension(password_hasher): Extension<PasswordHasher>,
+    Extension(password_hasher): Extension<password_hasher::PasswordHasher>,
     ValidatedJson(payload): ValidatedJson<SignupPayload>,
 ) -> Result<(StatusCode, Json<AccountResponse>), AccountError> {
     if let Some(mut existing_account) = app_state
