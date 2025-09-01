@@ -6,8 +6,10 @@ use axum::{
     response::{IntoResponse, Response},
     routing::post,
 };
+use base64ct::Encoding;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use sha2::{Digest, Sha256};
 use thiserror::Error;
 use tracing::{error, warn};
 use validator::{Validate, ValidationError, ValidationErrors};
@@ -34,8 +36,17 @@ struct PasswordHasher {
 }
 
 impl PasswordHasher {
+    /// Hash a password and a salt using SHA256, the hash is returned as base64 encoded string
+    ///
+    /// # Arguments
+    /// * `password` - Password to hash
     fn hash_password(&self, password: &str) -> String {
-        format!("{password}:{}", self.password_salt)
+        let mut hasher = Sha256::new();
+        hasher.update(password);
+        hasher.update(&self.password_salt);
+        let hash = hasher.finalize();
+
+        base64ct::Base64::encode_string(&hash)
     }
 }
 
