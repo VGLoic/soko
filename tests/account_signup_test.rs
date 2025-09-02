@@ -49,7 +49,7 @@ async fn test_account_signup_two_successive_times() {
 
     let updated_password = "abcdefgh1234".to_owned();
 
-    let response = client
+    let update_response = client
         .post(format!("{}/accounts/signup", &test_state.server_url))
         .json(&SignupPayload {
             email: email.clone(),
@@ -58,5 +58,10 @@ async fn test_account_signup_two_successive_times() {
         .send()
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::CREATED);
+    assert_eq!(update_response.status(), StatusCode::CREATED);
+
+    let account = response.json::<AccountResponse>().await.unwrap();
+    let updated_account = update_response.json::<AccountResponse>().await.unwrap();
+    assert_eq!(account.created_at, updated_account.created_at);
+    assert!(account.updated_at.timestamp() < updated_account.updated_at.timestamp());
 }

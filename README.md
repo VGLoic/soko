@@ -206,8 +206,7 @@ Implementation of a domain must follow a set of rules:
     pub enum AccountRepositoryError {
         #[error(transparent)]
         Unclassified(#[from] anyhow::Error),
-        #[error("Account not found using search param: {0}")]
-        AccountNotFound(String),
+        // Other errors to be added depending of the needs
     }
     ```
 - each route handler must be defined in a dedicated handler function. A handler function returns a result of the form `Result<(StatusCode, Json<ResponseType>), DomainRouteError>`,

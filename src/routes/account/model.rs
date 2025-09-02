@@ -18,7 +18,6 @@ impl Account {
     /// * `password_hash` - Updated password hash
     pub fn update_password_hash(&mut self, password_hash: String) {
         self.password_hash = password_hash;
-        self.updated_at = Utc::now();
     }
 }
 

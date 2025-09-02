@@ -110,7 +110,7 @@ async fn signup_account(
 
         existing_account.update_password_hash(PasswordHasher::hash_password(&payload.password)?);
 
-        app_state
+        existing_account = app_state
             .account_repository
             .update_account(&existing_account)
             .await

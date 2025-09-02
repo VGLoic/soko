@@ -23,9 +23,8 @@ pub trait AccountRepository: Send + Sync {
     /// * `account` - Updated account,
     ///
     /// # Errors
-    /// - `AccountNotFound`: account not found
     /// - `Unclassified`: fallback error type
-    async fn update_account(&self, account: &Account) -> Result<(), AccountRepositoryError>;
+    async fn update_account(&self, account: &Account) -> Result<Account, AccountRepositoryError>;
 
     /// Create an account
     ///
@@ -34,7 +33,6 @@ pub trait AccountRepository: Send + Sync {
     /// * `password_hash` - Hash of the password
     ///
     /// # Errors
-    /// - `AccountNotFound`: account not found after creation
     /// - `Unclassified`: fallback error type
     async fn create_account(
         &self,
@@ -47,8 +45,6 @@ pub trait AccountRepository: Send + Sync {
 pub enum AccountRepositoryError {
     #[error(transparent)]
     Unclassified(#[from] anyhow::Error),
-    #[error("Account not found using search param: {0}")]
-    AccountNotFound(String),
 }
 
 pub struct PostgresAccountRepository {
@@ -95,8 +91,8 @@ impl AccountRepository for PostgresAccountRepository {
         }
     }
 
-    async fn update_account(&self, account: &Account) -> Result<(), AccountRepositoryError> {
-        let rows_affected = sqlx::query(
+    async fn update_account(&self, account: &Account) -> Result<Account, AccountRepositoryError> {
+        sqlx::query_as::<_, Account>(
             r#"
                 UPDATE "account"
                 SET
@@ -104,25 +100,22 @@ impl AccountRepository for PostgresAccountRepository {
                     "email_verified" = $3,
                     "updated_at" = $4
                 WHERE "id" = $1
+                RETURNING 
+                    id,
+                    email,
+                    password_hash,
+                    email_verified,
+                    created_at,
+                    updated_at
             "#,
         )
         .bind(account.id)
         .bind(&account.password_hash)
         .bind(account.email_verified)
         .bind(account.updated_at)
-        .execute(&self.pool)
+        .fetch_one(&self.pool)
         .await
-        .map_err(anyhow::Error::from)?
-        .rows_affected();
-
-        if rows_affected == 0 {
-            return Err(AccountRepositoryError::AccountNotFound(format!(
-                "id = {}",
-                account.id
-            )));
-        }
-
-        Ok(())
+        .map_err(|e| anyhow::Error::from(e).into())
     }
 
     async fn create_account(
@@ -130,7 +123,7 @@ impl AccountRepository for PostgresAccountRepository {
         email: &str,
         password_hash: &str,
     ) -> Result<Account, AccountRepositoryError> {
-        sqlx::query(
+        sqlx::query_as::<_, Account>(
             r#"
                 INSERT INTO "account" (
                     "email",
@@ -138,19 +131,19 @@ impl AccountRepository for PostgresAccountRepository {
                 ) VALUES (
                     $1,
                     $2
-                )
+                ) RETURNING 
+                    id,
+                    email,
+                    password_hash,
+                    email_verified,
+                    created_at,
+                    updated_at
             "#,
         )
         .bind(email)
         .bind(password_hash)
-        .execute(&self.pool)
+        .fetch_one(&self.pool)
         .await
-        .map_err(anyhow::Error::from)?;
-
-        self.get_account_by_email(email)
-            .await?
-            .ok_or(AccountRepositoryError::AccountNotFound(format!(
-                "email = {email}"
-            )))
+        .map_err(|e| anyhow::Error::from(e).into())
     }
 }
