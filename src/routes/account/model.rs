@@ -37,7 +37,7 @@ mod tests {
             Account {
                 id: uuid::Uuid::new_v4(),
                 email: faker::internet::en::SafeEmail().fake_with_rng(rng),
-                // Bcrypt hash of `abcd1234efg``
+                // Bcrypt hash of `abcd1234efg`
                 password_hash: "$2y$10$EZGQ6TDVUAicnOu4LgVoI.kFmcbFkT9nlOXeLfnKZtJYF8YjMM3mG"
                     .to_string(),
                 email_verified: true,
