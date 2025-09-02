@@ -16,9 +16,30 @@ impl Account {
     ///
     /// # Arguments
     /// * `password_hash` - Updated password hash
-    pub fn update_password_hash(&mut self, password_hash: String) -> &mut Self {
+    pub fn update_password_hash(&mut self, password_hash: String) {
         self.password_hash = password_hash;
         self.updated_at = Utc::now();
-        self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use fake::{Fake, Faker, faker};
+
+    use super::*;
+
+    #[test]
+    fn test_update_password_hash() {
+        let mut account = Account {
+            id: uuid::Uuid::new_v4(),
+            email: faker::internet::en::SafeEmail().fake(),
+            password_hash: Faker.fake(),
+            email_verified: false,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+        let new_password_hash: String = Faker.fake();
+        account.update_password_hash(new_password_hash.clone());
+        assert_eq!(account.password_hash, new_password_hash);
     }
 }
