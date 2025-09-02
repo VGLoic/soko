@@ -24,7 +24,6 @@ pub async fn setup() -> Result<TestState, anyhow::Error> {
         port: 0,
         log_level: Level::TRACE,
         database_url: INTEGRATION_DATABASE_URL.to_string(),
-        password_salt: "abc123".to_string(),
     };
 
     let pool = PgPoolOptions::new()

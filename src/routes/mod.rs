@@ -6,12 +6,12 @@ mod account;
 use super::Config;
 pub use account::{AccountRepository, AccountResponse, PostgresAccountRepository, SignupPayload};
 
-pub fn app_router(config: &Config, account_repository: impl AccountRepository + 'static) -> Router {
+pub fn app_router(_: &Config, account_repository: impl AccountRepository + 'static) -> Router {
     let app_state = AppState {
         account_repository: Arc::new(account_repository),
     };
     Router::new()
-        .nest("/accounts", account::account_router(&config.password_salt))
+        .nest("/accounts", account::account_router())
         .route("/health", get(get_healthcheck))
         .fallback(not_found_handler)
         .with_state(app_state)

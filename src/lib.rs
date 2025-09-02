@@ -10,7 +10,6 @@ pub struct Config {
     pub port: u16,
     pub log_level: Level,
     pub database_url: String,
-    pub password_salt: String,
 }
 
 impl Config {
@@ -40,13 +39,6 @@ impl Config {
                 "".to_string()
             }
         };
-        let password_salt = match parse_required_env_variable::<String>("PASSWORD_SALT") {
-            Ok(v) => v,
-            Err(e) => {
-                errors.push(e.to_string());
-                "".to_string()
-            }
-        };
 
         if !errors.is_empty() {
             return Err(anyhow::anyhow!(errors.join(", ")));
@@ -55,7 +47,6 @@ impl Config {
             port,
             log_level,
             database_url,
-            password_salt,
         })
     }
 }
