@@ -40,9 +40,6 @@ impl Config {
                 "".to_string()
             }
         };
-        if !errors.is_empty() {
-            return Err(anyhow::anyhow!(errors.join(", ")));
-        }
         let password_salt = match parse_required_env_variable::<String>("PASSWORD_SALT") {
             Ok(v) => v,
             Err(e) => {
@@ -50,6 +47,9 @@ impl Config {
                 "".to_string()
             }
         };
+        if !errors.is_empty() {
+            return Err(anyhow::anyhow!(errors.join(", ")));
+        }
         Ok(Config {
             port,
             log_level,
