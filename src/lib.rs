@@ -47,6 +47,7 @@ impl Config {
                 "".to_string()
             }
         };
+
         if !errors.is_empty() {
             return Err(anyhow::anyhow!(errors.join(", ")));
         }
