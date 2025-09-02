@@ -63,5 +63,10 @@ async fn test_account_signup_two_successive_times() {
     let account = response.json::<AccountResponse>().await.unwrap();
     let updated_account = update_response.json::<AccountResponse>().await.unwrap();
     assert_eq!(account.created_at, updated_account.created_at);
-    assert!(account.updated_at.timestamp() < updated_account.updated_at.timestamp());
+    assert!(
+        account.updated_at.timestamp() < updated_account.updated_at.timestamp(),
+        "{} is equal or after {}",
+        account.updated_at,
+        updated_account.updated_at
+    );
 }
