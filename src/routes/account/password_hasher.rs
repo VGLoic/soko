@@ -2,7 +2,7 @@
 pub struct PasswordHasher;
 
 impl PasswordHasher {
-    /// Hash a password and a salt using SHA256, the hash is returned as base64 encoded string
+    /// Hash a password using the bcrypt algorithm. The returned string is a bcrypt-formatted hash.
     ///
     /// # Arguments
     /// * `password` - Password to hash
