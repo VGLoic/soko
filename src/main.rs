@@ -6,7 +6,10 @@ use axum::{
     http::{HeaderName, Response},
 };
 use dotenvy::dotenv;
-use soko::{Config, routes::app_router};
+use soko::{
+    Config,
+    routes::{PostgresAccountRepository, app_router},
+};
 use sqlx::postgres::PgPoolOptions;
 use tokio::signal;
 use tower_http::{
@@ -27,10 +30,12 @@ async fn main() -> Result<(), anyhow::Error> {
         return Err(anyhow::anyhow!("Error while loading .env file: {err}"));
     }
 
-    let config = match Config::build() {
+    let config = match Config::parse_environment() {
         Ok(c) => c,
         Err(e) => {
-            return Err(anyhow::anyhow!("Error while building configuration: {e}"));
+            return Err(anyhow::anyhow!(
+                "Failed to parse environment variables for configuration: {e}"
+            ));
         }
     };
 
@@ -65,50 +70,52 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let x_request_id = HeaderName::from_static(REQUEST_ID_HEADER);
 
-    let app = app_router()
-        .layer(SetRequestIdLayer::new(
-            x_request_id.clone(),
-            MakeRequestUuid,
-        ))
-        .layer(
-            TraceLayer::new_for_http()
-                .make_span_with(|request: &Request<_>| {
-                    let matched_path = request
-                        .extensions()
-                        .get::<MatchedPath>()
-                        .map(MatchedPath::as_str);
+    let account_repository = PostgresAccountRepository::from(pool);
 
-                    let request_id = request.headers().get(REQUEST_ID_HEADER);
+    let app = app_router(&config, account_repository).layer((
+        // Set `x-request-id` header for every request
+        SetRequestIdLayer::new(x_request_id.clone(), MakeRequestUuid),
+        // Log request and response
+        TraceLayer::new_for_http()
+            .make_span_with(|request: &Request<_>| {
+                let matched_path = request
+                    .extensions()
+                    .get::<MatchedPath>()
+                    .map(MatchedPath::as_str);
 
-                    match request_id {
-                        Some(v) => info_span!(
+                let request_id = request.headers().get(REQUEST_ID_HEADER);
+
+                match request_id {
+                    Some(v) => info_span!(
+                        "http_request",
+                        method = ?request.method(),
+                        matched_path,
+                        request_id = ?v
+                    ),
+                    None => {
+                        error!("Failed to extract `request_id` header");
+                        info_span!(
                             "http_request",
                             method = ?request.method(),
                             matched_path,
-                            request_id = ?v
-                        ),
-                        None => {
-                            error!("Failed to extract `request_id` header");
-                            info_span!(
-                                "http_request",
-                                method = ?request.method(),
-                                matched_path,
-                            )
-                        }
+                        )
                     }
-                })
-                .on_response(
-                    |response: &Response<Body>, latency: Duration, _span: &Span| {
-                        if response.status().is_server_error() {
-                            error!("response: {} {latency:?}", response.status())
-                        } else {
-                            info!("response: {} {latency:?}", response.status())
-                        }
-                    },
-                ),
-        )
-        .layer(TimeoutLayer::new(Duration::from_secs(10)))
-        .layer(PropagateRequestIdLayer::new(x_request_id));
+                }
+            })
+            .on_response(
+                |response: &Response<Body>, latency: Duration, _span: &Span| {
+                    if response.status().is_server_error() {
+                        error!("response: {} {latency:?}", response.status())
+                    } else {
+                        info!("response: {} {latency:?}", response.status())
+                    }
+                },
+            ),
+        // Timeout requests at 10 seconds
+        TimeoutLayer::new(Duration::from_secs(10)),
+        // Propagate the `x-request-id` header to responses
+        PropagateRequestIdLayer::new(x_request_id),
+    ));
 
     let addr = format!("0.0.0.0:{}", config.port);
     let listener = tokio::net::TcpListener::bind(&addr).await.map_err(|err| {
