@@ -27,7 +27,7 @@ pub trait AccountRepository: Send + Sync {
     /// - `Unclassified`: fallback error type
     async fn update_account(&self, account: &Account) -> Result<(), AccountRepositoryError>;
 
-    /// Crate an account
+    /// Create an account
     ///
     /// # Arguments
     /// * `email` - Email of the account,
