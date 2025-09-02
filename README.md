@@ -135,28 +135,28 @@ Implementation of a domain must follow a set of rules:
     }
     ```
 - the domain defines one or multiple entities in order to define it. These entities are implemented as Rust structures,
-    ```rust
-    #[derive(FromRow)]
-    pub struct Account {
-        pub id: uuid::Uuid,
-        pub email: String,
-        pub password_hash: String,
-        pub email_verified: bool,
-        pub created_at: DateTime<Utc>,
-        pub updated_at: DateTime<Utc>,
-    }
-    ```
-- each domain entity must implement its set of methods in order to define what business rules are allowed for this entity. We define this collection of methods the `entity model`,
+```rust
+#[derive(FromRow)]
+pub struct Account {
+    pub id: uuid::Uuid,
+    pub email: String,
+    pub password_hash: String,
+    pub email_verified: bool,
+    // This field is automatically set at creation at the database level
+    pub created_at: DateTime<Utc>,
+    // This field is automatically updated at the database level
+    pub updated_at: DateTime<Utc>,
+}
+```
+- each domain entity must implement its set of methods in order to define what business rules are allowed for this entity. We define this collection of methods the `entity model`. The time of last update is automatically handled at the database level and should not be taken into account in model methods,
     ```rust
     impl Account {
         /// Update the password hash of an account
         ///
         /// # Arguments
         /// * `password_hash` - Updated password hash
-        pub fn update_password_hash(&mut self, password_hash: String) -> &mut Self {
+        pub fn update_password_hash(&mut self, password_hash: String) {
             self.password_hash = password_hash;
-            self.updated_at = Utc::now();
-            self
         }
     }
     ```
@@ -182,9 +182,8 @@ Implementation of a domain must follow a set of rules:
         /// * `account` - Updated account,
         ///
         /// # Errors
-        /// - `AccountNotFound`: account not found
         /// - `Unclassified`: fallback error type
-        async fn update_account(&self, account: &Account) -> Result<(), AccountRepositoryError>;
+        async fn update_account(&self, account: &Account) -> Result<Account, AccountRepositoryError>;
 
         /// Create an account
         ///
@@ -193,7 +192,6 @@ Implementation of a domain must follow a set of rules:
         /// * `password_hash` - Hash of the password
         ///
         /// # Errors
-        /// - `AccountNotFound`: account not found after creation
         /// - `Unclassified`: fallback error type
         async fn create_account(
             &self,

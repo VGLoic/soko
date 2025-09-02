@@ -7,7 +7,9 @@ pub struct Account {
     pub email: String,
     pub password_hash: String,
     pub email_verified: bool,
+    // This field is automatically set at creation at the database level
     pub created_at: DateTime<Utc>,
+    // This field is automatically updated at the database level
     pub updated_at: DateTime<Utc>,
 }
 
