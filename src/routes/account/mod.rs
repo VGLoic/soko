@@ -16,8 +16,8 @@ mod repository;
 pub use repository::{AccountRepository, PostgresAccountRepository};
 
 use super::AppState;
-mod password_hasher;
-use password_hasher::PasswordHasher;
+mod password_strategy;
+use password_strategy::PasswordStrategy;
 
 pub fn account_router() -> Router<AppState> {
     Router::new().route("/signup", post(signup_account))
@@ -108,7 +108,7 @@ async fn signup_account(
             return Err(AccountError::AccountAlreadyVerified(existing_account.email));
         }
 
-        existing_account.update_password_hash(PasswordHasher::hash_password(&payload.password)?);
+        existing_account.update_password_hash(PasswordStrategy::hash_password(&payload.password)?);
 
         existing_account = app_state
             .account_repository
@@ -123,7 +123,7 @@ async fn signup_account(
         .account_repository
         .create_account(
             &payload.email,
-            &PasswordHasher::hash_password(&payload.password)?,
+            &PasswordStrategy::hash_password(&payload.password)?,
         )
         .await
         .map_err(anyhow::Error::from)?;
