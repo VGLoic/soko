@@ -1,4 +1,4 @@
-use argon2::{password_hash::{Salt}, Argon2, PasswordHasher};
+use argon2::{Argon2, PasswordHasher, password_hash::Salt};
 use base64::prelude::*;
 use rand::prelude::*;
 use rand_chacha::ChaCha20Rng;
