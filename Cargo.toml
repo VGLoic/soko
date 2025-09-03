@@ -9,7 +9,6 @@ argon2 = "0.5.3"
 async-trait = "0.1.89"
 axum = { version = "0.8.4", features = ["macros"] }
 base64 = "0.22.1"
-bcrypt = "0.17.1"
 chrono = { version = "0.4.41", features = ["serde"] }
 dotenvy = "0.15.7"
 fake = { version = "4.4.0", features = ["chrono"] }
