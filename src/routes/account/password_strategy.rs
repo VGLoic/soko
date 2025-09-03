@@ -7,7 +7,7 @@ use rand_chacha::ChaCha20Rng;
 pub struct PasswordStrategy;
 
 impl PasswordStrategy {
-    /// Hash a password using the Argon2id algorithm. The returned string is a argon-formatted hash.
+    /// Hash a password using the Argon2id algorithm. The returned string is a argon2-formatted hash.
     ///
     /// # Arguments
     /// * `password` - Password to hash
