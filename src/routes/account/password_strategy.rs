@@ -1,6 +1,7 @@
-use argon2::{Argon2, PasswordHasher, password_hash::Salt};
+use argon2::{password_hash::{Salt}, Argon2, PasswordHasher};
 use base64::prelude::*;
-use rand::RngCore;
+use rand::prelude::*;
+use rand_chacha::ChaCha20Rng;
 
 #[derive(Clone, Debug)]
 pub struct PasswordStrategy;
@@ -11,8 +12,11 @@ impl PasswordStrategy {
     /// # Arguments
     /// * `password` - Password to hash
     pub fn hash_password(password: &str) -> Result<String, anyhow::Error> {
+        if password.is_empty() {
+            return Err(anyhow::anyhow!("Password must not be empty"));
+        }
         let mut salt = [0u8; 16];
-        let mut rng = rand::rng();
+        let mut rng = ChaCha20Rng::from_os_rng();
         rng.fill_bytes(&mut salt);
         let base64_salt = BASE64_STANDARD_NO_PAD.encode(salt);
         let argon_salt = Salt::from_b64(&base64_salt).map_err(|e| anyhow::anyhow!("{e}"))?;
