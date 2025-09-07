@@ -21,6 +21,11 @@ impl Account {
     pub fn update_password_hash(&mut self, password_hash: String) {
         self.password_hash = password_hash;
     }
+
+    /// Verify the email of an account
+    pub fn verify_email(&mut self) {
+        self.email_verified = true;
+    }
 }
 
 #[cfg(test)]
