@@ -127,7 +127,7 @@ mod tests {
     }
 
     #[test]
-    fn test_confirm() {
+    fn test_confirm_verification_request() {
         let mut verification_request: VerificationCodeRequest = Faker.fake();
         verification_request.confirm();
         match verification_request.status {
@@ -136,5 +136,15 @@ mod tests {
                 panic!("Expected `confirmed` verification request")
             }
         };
+    }
+
+    #[test]
+    fn test_verification_request_expiration() {
+        let mut verification_request: VerificationCodeRequest = Faker.fake();
+        verification_request.created_at = Utc::now().checked_sub_signed(TimeDelta::minutes(14)).unwrap();
+        assert!(!verification_request.is_expired());
+
+        verification_request.created_at = Utc::now().checked_sub_signed(TimeDelta::minutes(16)).unwrap();
+        assert!(verification_request.is_expired());
     }
 }
