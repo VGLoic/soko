@@ -170,7 +170,7 @@ pub struct Account {
         /// * `email` - Email of the account
         ///
         /// # Errors
-        /// - `Unclassified`: fallback error type
+        /// * `Unclassified` - fallback error type
         async fn get_account_by_email(
             &self,
             email: &str,
@@ -182,7 +182,7 @@ pub struct Account {
         /// * `account` - Updated account,
         ///
         /// # Errors
-        /// - `Unclassified`: fallback error type
+        /// * `Unclassified` - fallback error type
         async fn update_account(&self, account: &Account) -> Result<Account, AccountRepositoryError>;
 
         /// Create an account
@@ -192,7 +192,7 @@ pub struct Account {
         /// * `password_hash` - Hash of the password
         ///
         /// # Errors
-        /// - `Unclassified`: fallback error type
+        /// * `Unclassified` - fallback error type
         async fn create_account(
             &self,
             email: &str,

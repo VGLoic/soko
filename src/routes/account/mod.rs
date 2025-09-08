@@ -15,9 +15,12 @@ pub mod model;
 mod repository;
 pub use repository::{AccountRepository, PostgresAccountRepository};
 
+use crate::routes::account::verification_code_strategy::VerificationCodeStrategy;
+
 use super::AppState;
 mod password_strategy;
 use password_strategy::PasswordStrategy;
+mod verification_code_strategy;
 
 pub fn account_router() -> Router<AppState> {
     Router::new()
@@ -37,6 +40,8 @@ pub enum AccountError {
     AccountAlreadyVerified(String),
     #[error("Account not found for email: {0}")]
     AccountNotFound(String),
+    #[error("Invalid verification code for email: {0}")]
+    InvalidVerificationCode(String),
 }
 
 impl IntoResponse for AccountError {
@@ -56,6 +61,9 @@ impl IntoResponse for AccountError {
                 (StatusCode::BAD_REQUEST, Json(errors)).into_response()
             }
             Self::AccountNotFound(_) => (StatusCode::NOT_FOUND, "Not found").into_response(),
+            Self::InvalidVerificationCode(_) => {
+                (StatusCode::BAD_REQUEST, "Invalid code").into_response()
+            }
         }
     }
 }
@@ -115,14 +123,33 @@ async fn signup_account(
 
         existing_account.update_password_hash(PasswordStrategy::hash_password(&payload.password)?);
 
+        let (code, code_cyphertext) =
+            VerificationCodeStrategy::generate_verification_code(&payload.email)?;
+
         existing_account = app_state
             .account_repository
             .update_account(&existing_account)
             .await
             .map_err(anyhow::Error::from)?;
+        app_state
+            .account_repository
+            .cancel_last_and_create_verification_request(
+                existing_account.id,
+                code_cyphertext.as_str(),
+            )
+            .await
+            .map_err(anyhow::Error::from)?;
+
+        app_state
+            .mailing_service
+            .send_email(&payload.email, code.to_string().as_str())
+            .await?;
 
         return Ok((StatusCode::CREATED, Json(existing_account.into())));
     }
+
+    let (code, code_cyphertext) =
+        VerificationCodeStrategy::generate_verification_code(&payload.email)?;
 
     let created_account = app_state
         .account_repository
@@ -132,6 +159,16 @@ async fn signup_account(
         )
         .await
         .map_err(anyhow::Error::from)?;
+    app_state
+        .account_repository
+        .cancel_last_and_create_verification_request(created_account.id, code_cyphertext.as_str())
+        .await
+        .map_err(anyhow::Error::from)?;
+
+    app_state
+        .mailing_service
+        .send_email(&payload.email, code.to_string().as_str())
+        .await?;
 
     Ok((StatusCode::CREATED, Json(created_account.into())))
 }
@@ -160,10 +197,36 @@ async fn verify_email(
         return Err(AccountError::AccountAlreadyVerified(payload.email));
     }
 
+    let mut verification_request = app_state
+        .account_repository
+        .get_active_validation_request(existing_account.id)
+        .await
+        .map_err(anyhow::Error::from)?
+        .ok_or_else(|| anyhow::anyhow!("Active verification request not found"))?;
+
+    if verification_request.is_expired() {
+        return Err(AccountError::InvalidVerificationCode(payload.email));
+    }
+
+    if !VerificationCodeStrategy::verify_verification_code(
+        payload.code,
+        &existing_account.email,
+        &verification_request.cyphertext,
+    )? {
+        return Err(AccountError::InvalidVerificationCode(payload.email));
+    }
+
     existing_account.verify_email();
+    verification_request.confirm();
+
     existing_account = app_state
         .account_repository
         .update_account(&existing_account)
+        .await
+        .map_err(anyhow::Error::from)?;
+    app_state
+        .account_repository
+        .update_verification_request(&verification_request)
         .await
         .map_err(anyhow::Error::from)?;
 

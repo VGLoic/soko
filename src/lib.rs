@@ -5,6 +5,7 @@ use std::{
 use tracing::Level;
 
 pub mod routes;
+pub mod third_party;
 
 pub struct Config {
     pub port: u16,

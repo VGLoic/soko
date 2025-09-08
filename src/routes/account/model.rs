@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, TimeDelta, Utc};
 use sqlx::{prelude::FromRow, types::uuid};
 
 #[derive(FromRow)]
@@ -28,10 +28,49 @@ impl Account {
     }
 }
 
+#[derive(FromRow)]
+pub struct VerificationCodeRequest {
+    pub id: uuid::Uuid,
+    pub account_id: uuid::Uuid,
+    pub cyphertext: String,
+    pub status: VerificationCodeRequestStatus,
+    // This field is automatically set at creation at the database level
+    pub created_at: DateTime<Utc>,
+    // This field is automatically updated at the database level
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(sqlx::Type)]
+#[sqlx(
+    type_name = "verification_code_request_status",
+    rename_all = "lowercase"
+)]
+pub enum VerificationCodeRequestStatus {
+    Active,
+    Cancelled,
+    Confirmed,
+}
+
+impl VerificationCodeRequest {
+    pub fn confirm(&mut self) {
+        self.status = VerificationCodeRequestStatus::Confirmed
+    }
+
+    pub fn is_expired(&self) -> bool {
+        Utc::now()
+            .signed_duration_since(self.created_at)
+            .gt(&TimeDelta::minutes(15))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use chrono::Days;
     use fake::{Dummy, Fake, Faker, faker};
+
+    use crate::routes::account::verification_code_strategy::VerificationCodeStrategy;
+
+    use super::*;
 
     impl<T> Dummy<T> for Account {
         fn dummy_with_rng<R: fake::Rng + ?Sized>(_: &T, rng: &mut R) -> Self {
@@ -42,7 +81,6 @@ mod tests {
             Account {
                 id: uuid::Uuid::new_v4(),
                 email: faker::internet::en::SafeEmail().fake_with_rng(rng),
-                // Bcrypt hash of `abcd1234efg`
                 password_hash: "$2y$10$EZGQ6TDVUAicnOu4LgVoI.kFmcbFkT9nlOXeLfnKZtJYF8YjMM3mG"
                     .to_string(),
                 email_verified: true,
@@ -53,7 +91,25 @@ mod tests {
         }
     }
 
-    use super::*;
+    impl<T> Dummy<T> for VerificationCodeRequest {
+        fn dummy_with_rng<R: fake::Rng + ?Sized>(_: &T, rng: &mut R) -> Self {
+            let created_at = faker::chrono::en::DateTimeBefore(
+                Utc::now().checked_sub_days(Days::new(2)).unwrap(),
+            )
+            .fake_with_rng(rng);
+            let (_, cyphertext) =
+                VerificationCodeStrategy::generate_verification_code("abc@def.com").unwrap();
+            VerificationCodeRequest {
+                id: uuid::Uuid::new_v4(),
+                account_id: uuid::Uuid::new_v4(),
+                cyphertext,
+                status: VerificationCodeRequestStatus::Active,
+                created_at,
+                updated_at: faker::chrono::en::DateTimeBetween(created_at, Utc::now())
+                    .fake_with_rng(rng),
+            }
+        }
+    }
 
     #[test]
     fn test_update_password_hash() {
@@ -68,5 +124,31 @@ mod tests {
         let mut account: Account = Faker.fake();
         account.verify_email();
         assert!(account.email_verified);
+    }
+
+    #[test]
+    fn test_confirm_verification_request() {
+        let mut verification_request: VerificationCodeRequest = Faker.fake();
+        verification_request.confirm();
+        match verification_request.status {
+            VerificationCodeRequestStatus::Confirmed => {}
+            _ => {
+                panic!("Expected `confirmed` verification request")
+            }
+        };
+    }
+
+    #[test]
+    fn test_verification_request_expiration() {
+        let mut verification_request: VerificationCodeRequest = Faker.fake();
+        verification_request.created_at = Utc::now()
+            .checked_sub_signed(TimeDelta::minutes(14))
+            .unwrap();
+        assert!(!verification_request.is_expired());
+
+        verification_request.created_at = Utc::now()
+            .checked_sub_signed(TimeDelta::minutes(16))
+            .unwrap();
+        assert!(verification_request.is_expired());
     }
 }

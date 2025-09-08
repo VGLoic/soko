@@ -1,6 +1,6 @@
-use super::model::Account;
+use super::model::{Account, VerificationCodeRequest};
 use async_trait::async_trait;
-use sqlx::{Pool, Postgres};
+use sqlx::{Pool, Postgres, types::uuid};
 use thiserror::Error;
 
 #[async_trait]
@@ -11,7 +11,7 @@ pub trait AccountRepository: Send + Sync {
     /// * `email` - Email of the account
     ///
     /// # Errors
-    /// - `Unclassified`: fallback error type
+    /// * `Unclassified` - fallback error type
     async fn get_account_by_email(
         &self,
         email: &str,
@@ -23,7 +23,7 @@ pub trait AccountRepository: Send + Sync {
     /// * `account` - Updated account,
     ///
     /// # Errors
-    /// - `Unclassified`: fallback error type
+    /// * `Unclassified` - fallback error type
     async fn update_account(&self, account: &Account) -> Result<Account, AccountRepositoryError>;
 
     /// Create an account
@@ -33,12 +33,50 @@ pub trait AccountRepository: Send + Sync {
     /// * `password_hash` - Hash of the password
     ///
     /// # Errors
-    /// - `Unclassified`: fallback error type
+    /// * `Unclassified` - fallback error type
     async fn create_account(
         &self,
         email: &str,
         password_hash: &str,
     ) -> Result<Account, AccountRepositoryError>;
+
+    /// Cancel the last "active" request if any and create a new request linked to the account
+    ///
+    /// # Arguments
+    /// * `account_id` - ID of the account,
+    /// * `code_cyphertext` - cyphertext of the verification code
+    ///
+    /// # Errors
+    /// * `Unclassified` - fallback error type
+    async fn cancel_last_and_create_verification_request(
+        &self,
+        account_id: uuid::Uuid,
+        code_cyphertext: &str,
+    ) -> Result<VerificationCodeRequest, AccountRepositoryError>;
+
+    /// Get the active verification request for an account
+    ///
+    /// # Arguments
+    /// * `account_id` - ID of the account,
+    ///
+    /// # Errors
+    /// * `Unclassified` - fallback error type
+    async fn get_active_validation_request(
+        &self,
+        account_id: uuid::Uuid,
+    ) -> Result<Option<VerificationCodeRequest>, AccountRepositoryError>;
+
+    /// Update a verification request
+    ///
+    /// # Arguments
+    /// * `verification_request` - Updated verification request
+    ///
+    /// # Errors
+    /// * `Unclassified` - fallback error type
+    async fn update_verification_request(
+        &self,
+        verification_request: &VerificationCodeRequest,
+    ) -> Result<VerificationCodeRequest, AccountRepositoryError>;
 }
 
 #[derive(Error, Debug)]
@@ -142,6 +180,101 @@ impl AccountRepository for PostgresAccountRepository {
         )
         .bind(email)
         .bind(password_hash)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| anyhow::Error::from(e).into())
+    }
+
+    async fn cancel_last_and_create_verification_request(
+        &self,
+        account_id: uuid::Uuid,
+        cyphertext: &str,
+    ) -> Result<VerificationCodeRequest, AccountRepositoryError> {
+        sqlx::query(
+            r#"
+                UPDATE "verification_code_request"
+                SET "status" = 'cancelled'
+                WHERE "account_id" = $1 AND "status" = 'active';
+            "#,
+        )
+        .bind(account_id)
+        .execute(&self.pool)
+        .await
+        .map_err(anyhow::Error::from)?;
+
+        sqlx::query_as::<_, VerificationCodeRequest>(
+            r#"
+                INSERT INTO "verification_code_request" (
+                    "account_id",
+                    "cyphertext"
+                ) VALUES (
+                    $1,
+                    $2
+                ) RETURNING
+                    id,
+                    account_id,
+                    cyphertext,
+                    status,
+                    created_at,
+                    updated_at
+            "#,
+        )
+        .bind(account_id)
+        .bind(cyphertext)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| anyhow::Error::from(e).into())
+    }
+
+    async fn get_active_validation_request(
+        &self,
+        account_id: uuid::Uuid,
+    ) -> Result<Option<VerificationCodeRequest>, AccountRepositoryError> {
+        match sqlx::query_as::<_, VerificationCodeRequest>(
+            r#"
+                SELECT
+                    id,
+                    account_id,
+                    cyphertext,
+                    status,
+                    created_at,
+                    updated_at
+                FROM "verification_code_request"
+                WHERE "account_id" = $1 AND "status" = 'active'
+            "#,
+        )
+        .bind(account_id)
+        .fetch_one(&self.pool)
+        .await
+        {
+            Ok(v) => Ok(Some(v)),
+            Err(e) => match e {
+                sqlx::Error::RowNotFound => Ok(None),
+                other => return Err(anyhow::Error::from(other).into()),
+            },
+        }
+    }
+
+    async fn update_verification_request(
+        &self,
+        verification_request: &VerificationCodeRequest,
+    ) -> Result<VerificationCodeRequest, AccountRepositoryError> {
+        sqlx::query_as::<_, VerificationCodeRequest>(
+            r#"
+            UPDATE "verification_code_request"
+            SET "status" = $2
+            WHERE "id" = $1
+            RETURNING 
+                id,
+                account_id,
+                cyphertext,
+                status,
+                created_at,
+                updated_at
+        "#,
+        )
+        .bind(verification_request.id)
+        .bind(&verification_request.status)
         .fetch_one(&self.pool)
         .await
         .map_err(|e| anyhow::Error::from(e).into())
