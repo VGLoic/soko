@@ -15,7 +15,7 @@ pub mod model;
 mod repository;
 pub use repository::{AccountRepository, PostgresAccountRepository};
 
-use crate::routes::account::verification_code_strategy::VerificationCodeStategy;
+use crate::routes::account::verification_code_strategy::VerificationCodeStrategy;
 
 use super::AppState;
 mod password_strategy;
@@ -124,7 +124,7 @@ async fn signup_account(
         existing_account.update_password_hash(PasswordStrategy::hash_password(&payload.password)?);
 
         let (code, code_cyphertext) =
-            VerificationCodeStategy::generate_verification_code(&payload.email)?;
+            VerificationCodeStrategy::generate_verification_code(&payload.email)?;
 
         existing_account = app_state
             .account_repository
@@ -149,7 +149,7 @@ async fn signup_account(
     }
 
     let (code, code_cyphertext) =
-        VerificationCodeStategy::generate_verification_code(&payload.email)?;
+        VerificationCodeStrategy::generate_verification_code(&payload.email)?;
 
     let created_account = app_state
         .account_repository
@@ -208,7 +208,7 @@ async fn verify_email(
         return Err(AccountError::InvalidVerificationCode(payload.email));
     }
 
-    if !VerificationCodeStategy::verify_verification_code(
+    if !VerificationCodeStrategy::verify_verification_code(
         payload.code,
         &existing_account.email,
         &verification_request.cyphertext,

@@ -68,7 +68,7 @@ mod tests {
     use chrono::Days;
     use fake::{Dummy, Fake, Faker, faker};
 
-    use crate::routes::account::verification_code_strategy::VerificationCodeStategy;
+    use crate::routes::account::verification_code_strategy::VerificationCodeStrategy;
 
     use super::*;
 
@@ -98,7 +98,7 @@ mod tests {
             )
             .fake_with_rng(rng);
             let (_, cyphertext) =
-                VerificationCodeStategy::generate_verification_code("abc@def.com").unwrap();
+                VerificationCodeStrategy::generate_verification_code("abc@def.com").unwrap();
             VerificationCodeRequest {
                 id: uuid::Uuid::new_v4(),
                 account_id: uuid::Uuid::new_v4(),

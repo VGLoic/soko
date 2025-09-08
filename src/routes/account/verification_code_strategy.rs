@@ -6,12 +6,12 @@ use rand_chacha::ChaCha20Rng;
 use sha3::Sha3_256;
 
 #[derive(Debug)]
-pub struct VerificationCodeStategy;
+pub struct VerificationCodeStrategy;
 
 const MAC_LENGTH: usize = 32;
 const SERIALIZED_KEY_LENGTH: usize = 97;
 
-impl VerificationCodeStategy {
+impl VerificationCodeStrategy {
     /// Generate a verification code linked to an email with its encryption
     ///
     /// The code is a random 8 digits number.
@@ -104,9 +104,9 @@ mod tests {
     fn test_verification_code_encryption() {
         let email: String = faker::internet::en::SafeEmail().fake();
         let (code, cyphertext) =
-            VerificationCodeStategy::generate_verification_code(&email).unwrap();
+            VerificationCodeStrategy::generate_verification_code(&email).unwrap();
         assert!(
-            VerificationCodeStategy::verify_verification_code(code, &email, &cyphertext).is_ok()
+            VerificationCodeStrategy::verify_verification_code(code, &email, &cyphertext).is_ok()
         );
     }
 }
