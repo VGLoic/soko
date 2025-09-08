@@ -142,8 +142,18 @@ async fn signup_account(
             .await
             .map_err(anyhow::Error::from)?;
 
+        app_state
+            .mailing_service
+            .send_email(&payload.email, code.to_string().as_str())
+            .await?;
+
         return Ok((StatusCode::CREATED, Json(existing_account.into())));
     }
+
+    let (code, code_cyphertext) =
+        VerificationCodeStategy::generate_verification_code(&payload.email)?;
+
+    warn!("THIS LOG IS MEANT TO BE DELETED IN THE FUTURE -- Code to input is {code}");
 
     let created_account = app_state
         .account_repository
@@ -153,16 +163,16 @@ async fn signup_account(
         )
         .await
         .map_err(anyhow::Error::from)?;
-
-    let (code, code_cyphertext) =
-        VerificationCodeStategy::generate_verification_code(&payload.email)?;
-
-    warn!("THIS LOG IS MEANT TO BE DELETED IN THE FUTURE -- Code to input is {code}");
     app_state
         .account_repository
         .cancel_last_and_create_verification_request(created_account.id, code_cyphertext.as_str())
         .await
         .map_err(anyhow::Error::from)?;
+
+    app_state
+        .mailing_service
+        .send_email(&payload.email, code.to_string().as_str())
+        .await?;
 
     Ok((StatusCode::CREATED, Json(created_account.into())))
 }

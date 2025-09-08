@@ -1,15 +1,20 @@
-use std::{net::SocketAddr, time::Duration};
+use std::{collections::HashMap, net::SocketAddr, sync::Arc, time::Duration};
 
+use async_trait::async_trait;
 use soko::{
     Config,
     routes::{PostgresAccountRepository, app_router},
+    third_party::MailingService,
 };
 use sqlx::postgres::PgPoolOptions;
+use tokio::sync::RwLock;
 use tower_http::trace::TraceLayer;
 use tracing::{Level, info, level_filters::LevelFilter};
 use tracing_subscriber::{Layer, layer::SubscriberExt, util::SubscriberInitExt};
 
+#[allow(dead_code)]
 pub struct TestState {
+    pub mailing_service: FakeMailingService,
     pub server_url: String,
 }
 
@@ -39,8 +44,10 @@ pub async fn setup() -> Result<TestState, anyhow::Error> {
         .map_err(|e| anyhow::anyhow!("Failed to run database migrations: {e}"))?;
 
     let account_repository = PostgresAccountRepository::from(pool);
+    let mailing_service = FakeMailingService::new();
 
-    let app = app_router(&config, account_repository).layer(TraceLayer::new_for_http());
+    let app = app_router(&config, account_repository, mailing_service.clone())
+        .layer(TraceLayer::new_for_http());
 
     // Giving 0 as port here will let the system dynamically find an available port
     // This is needed in order to let our test run in parallel
@@ -57,6 +64,41 @@ pub async fn setup() -> Result<TestState, anyhow::Error> {
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
 
     Ok(TestState {
+        mailing_service,
         server_url: format!("http://{}:{}", addr.ip(), addr.port()),
     })
+}
+
+#[derive(Clone, Debug)]
+pub struct FakeMailingService {
+    verification_codes: Arc<RwLock<HashMap<String, u32>>>,
+}
+
+impl FakeMailingService {
+    fn new() -> Self {
+        Self {
+            verification_codes: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn get_verification_code(&self, email: &str) -> Result<Option<u32>, anyhow::Error> {
+        let code = self
+            .verification_codes
+            .try_read()?
+            .get(email)
+            .map(|v| v.to_owned());
+        Ok(code)
+    }
+}
+
+#[async_trait]
+impl MailingService for FakeMailingService {
+    async fn send_email(&self, email: &str, content: &str) -> Result<(), anyhow::Error> {
+        let code: u32 = content.parse().map_err(|e| anyhow::anyhow!("{e}"))?;
+        self.verification_codes
+            .try_write()?
+            .insert(email.to_string(), code);
+        Ok(())
+    }
 }
