@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, TimeDelta, Utc};
 use sqlx::{prelude::FromRow, types::uuid};
 
 #[derive(FromRow)]
@@ -11,6 +11,21 @@ pub struct Account {
     pub created_at: DateTime<Utc>,
     // This field is automatically updated at the database level
     pub updated_at: DateTime<Utc>,
+}
+
+impl Account {
+    /// Update the password hash of an account
+    ///
+    /// # Arguments
+    /// * `password_hash` - Updated password hash
+    pub fn update_password_hash(&mut self, password_hash: String) {
+        self.password_hash = password_hash;
+    }
+
+    /// Verify the email of an account
+    pub fn verify_email(&mut self) {
+        self.email_verified = true;
+    }
 }
 
 #[derive(FromRow)]
@@ -36,18 +51,15 @@ pub enum VerificationCodeRequestStatus {
     Confirmed,
 }
 
-impl Account {
-    /// Update the password hash of an account
-    ///
-    /// # Arguments
-    /// * `password_hash` - Updated password hash
-    pub fn update_password_hash(&mut self, password_hash: String) {
-        self.password_hash = password_hash;
+impl VerificationCodeRequest {
+    pub fn confirm(&mut self) {
+        self.status = VerificationCodeRequestStatus::Confirmed
     }
 
-    /// Verify the email of an account
-    pub fn verify_email(&mut self) {
-        self.email_verified = true;
+    pub fn is_expired(&self) -> bool {
+        Utc::now()
+            .signed_duration_since(self.created_at)
+            .gt(&TimeDelta::minutes(15))
     }
 }
 

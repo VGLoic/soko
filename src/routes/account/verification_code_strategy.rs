@@ -49,7 +49,7 @@ impl VerificationCodeStategy {
         Ok((code, BASE64_STANDARD_NO_PAD.encode(cyphertext)))
     }
 
-    /// Verify a verification code.
+    /// Verify a verification code, returns true if code is correct, false otherwise
     ///
     /// The code is verified against the Argon2id generated key.
     /// The mail is verified against the HMAC of the generated key hash, the email and using SHA3-256
@@ -62,7 +62,7 @@ impl VerificationCodeStategy {
         code: u32,
         email: &str,
         cyphertext: &str,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<bool, anyhow::Error> {
         let cyphertext_bytes = BASE64_STANDARD_NO_PAD.decode(cyphertext)?;
         if cyphertext_bytes.len() != 129 {
             return Err(anyhow::anyhow!(
@@ -85,9 +85,8 @@ impl VerificationCodeStategy {
                 .as_bytes(),
         )?;
         hmac.update(email.as_bytes());
-        hmac.verify_slice(mac)?;
 
-        Ok(())
+        Ok(hmac.verify_slice(mac).is_ok())
     }
 }
 

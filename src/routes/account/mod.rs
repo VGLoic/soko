@@ -40,6 +40,8 @@ pub enum AccountError {
     AccountAlreadyVerified(String),
     #[error("Account not found for email: {0}")]
     AccountNotFound(String),
+    #[error("Invalid verification code for email: {0}")]
+    InvalidVerificationCode(String),
 }
 
 impl IntoResponse for AccountError {
@@ -59,6 +61,9 @@ impl IntoResponse for AccountError {
                 (StatusCode::BAD_REQUEST, Json(errors)).into_response()
             }
             Self::AccountNotFound(_) => (StatusCode::NOT_FOUND, "Not found").into_response(),
+            Self::InvalidVerificationCode(_) => {
+                (StatusCode::BAD_REQUEST, "Invalid code").into_response()
+            }
         }
     }
 }
@@ -130,7 +135,10 @@ async fn signup_account(
             .map_err(anyhow::Error::from)?;
         app_state
             .account_repository
-            .cancel_last_and_create_code_request(existing_account.id, code_cyphertext.as_str())
+            .cancel_last_and_create_verification_request(
+                existing_account.id,
+                code_cyphertext.as_str(),
+            )
             .await
             .map_err(anyhow::Error::from)?;
 
@@ -152,7 +160,7 @@ async fn signup_account(
     warn!("THIS LOG IS MEANT TO BE DELETED IN THE FUTURE -- Code to input is {code}");
     app_state
         .account_repository
-        .cancel_last_and_create_code_request(created_account.id, code_cyphertext.as_str())
+        .cancel_last_and_create_verification_request(created_account.id, code_cyphertext.as_str())
         .await
         .map_err(anyhow::Error::from)?;
 
@@ -183,10 +191,36 @@ async fn verify_email(
         return Err(AccountError::AccountAlreadyVerified(payload.email));
     }
 
+    let mut verification_request = app_state
+        .account_repository
+        .get_active_validation_request(existing_account.id)
+        .await
+        .map_err(anyhow::Error::from)?
+        .ok_or_else(|| anyhow::anyhow!("Active verification request not found"))?;
+
+    if verification_request.is_expired() {
+        return Err(AccountError::InvalidVerificationCode(payload.email));
+    }
+
+    if !VerificationCodeStategy::verify_verification_code(
+        payload.code,
+        &existing_account.email,
+        &verification_request.cyphertext,
+    )? {
+        return Err(AccountError::InvalidVerificationCode(payload.email));
+    }
+
     existing_account.verify_email();
+    verification_request.confirm();
+
     existing_account = app_state
         .account_repository
         .update_account(&existing_account)
+        .await
+        .map_err(anyhow::Error::from)?;
+    app_state
+        .account_repository
+        .update_verification_request(&verification_request)
         .await
         .map_err(anyhow::Error::from)?;
 
