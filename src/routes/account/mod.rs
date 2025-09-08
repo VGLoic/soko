@@ -187,7 +187,7 @@ where
                 return Err(match e {
                     JsonRejection::JsonDataError(_) => (
                         StatusCode::BAD_REQUEST,
-                        "Incomplete JSON body, expected fields are missing",
+                        "Valid JSON body but not the expected JSON data format",
                     )
                         .into_response(),
                     _ => (StatusCode::BAD_REQUEST, "Invalid JSON body").into_response(),
