@@ -6,7 +6,6 @@ use axum::{
     routing::post,
 };
 use chrono::{DateTime, Utc};
-use regex::Regex;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use thiserror::Error;
 use tracing::{error, warn};
@@ -142,25 +141,8 @@ async fn signup_account(
 pub struct VerifyEmailPayload {
     #[validate(email(message = "invalid email format"))]
     pub email: String,
-    #[validate(length(min = 1), custom(function = "validate_base64", code = "code"))]
-    pub code: String,
-}
-
-fn validate_base64(value: &str) -> Result<(), ValidationError> {
-    let re = Regex::new(r"^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{2}==)?$").map_err(
-        |e| {
-            error!("Unable to use regex in validate_base64, got error: {e}");
-            ValidationError::new("base64-validation")
-                .with_message("Unable to validate base 64 string".into())
-        },
-    )?;
-    if re.captures(value).is_none() {
-        return Err(
-            ValidationError::new("base64-validation").with_message("Invalid base64 value".into())
-        );
-    }
-
-    Ok(())
+    #[validate(range(min = 0, exclusive_max = 100_000_000))]
+    pub code: u32,
 }
 
 async fn verify_email(

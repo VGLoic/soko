@@ -1,6 +1,6 @@
 use fake::{Fake, faker};
 use reqwest::StatusCode;
-use soko::routes::{AccountResponse, SignupPayload};
+use soko::routes::{AccountResponse, SignupPayload, VerifyEmailPayload};
 
 mod common;
 
@@ -9,7 +9,7 @@ async fn test_account_signup() {
     let test_state = common::setup().await.unwrap();
 
     let email: String = faker::internet::en::SafeEmail().fake();
-    let password = "1234abcd5678".to_owned();
+    let password = faker::internet::en::Password(10..40).fake();
 
     let client = reqwest::Client::new();
     let response = client
@@ -29,11 +29,11 @@ async fn test_account_signup() {
 }
 
 #[tokio::test]
-async fn test_account_signup_two_successive_times() {
+async fn test_account_email_verification() {
     let test_state = common::setup().await.unwrap();
 
     let email: String = faker::internet::en::SafeEmail().fake();
-    let password = "1234abcd5678".to_owned();
+    let password = faker::internet::en::Password(10..40).fake();
 
     let client = reqwest::Client::new();
     let response = client
@@ -47,7 +47,94 @@ async fn test_account_signup_two_successive_times() {
         .unwrap();
     assert_eq!(response.status(), StatusCode::CREATED);
 
-    let updated_password = "abcdefgh1234".to_owned();
+    let response = client
+        .post(format!("{}/accounts/verify-email", &test_state.server_url))
+        .json(&VerifyEmailPayload {
+            email: email.clone(),
+            code: 12345678,
+        })
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn test_forbidden_signup_once_verified() {
+    let test_state = common::setup().await.unwrap();
+
+    let email: String = faker::internet::en::SafeEmail().fake();
+    let password = faker::internet::en::Password(10..40).fake();
+
+    let client = reqwest::Client::new();
+    client
+        .post(format!("{}/accounts/signup", &test_state.server_url))
+        .json(&SignupPayload {
+            email: email.clone(),
+            password,
+        })
+        .send()
+        .await
+        .unwrap();
+    client
+        .post(format!("{}/accounts/verify-email", &test_state.server_url))
+        .json(&VerifyEmailPayload {
+            email: email.clone(),
+            code: 12345678,
+        })
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(
+        client
+            .post(format!("{}/accounts/verify-email", &test_state.server_url))
+            .json(&VerifyEmailPayload {
+                email: email.clone(),
+                code: 12345678,
+            })
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::BAD_REQUEST
+    );
+
+    assert_eq!(
+        client
+            .post(format!("{}/accounts/signup", &test_state.server_url))
+            .json(&SignupPayload {
+                email: email.clone(),
+                password: faker::internet::en::Password(10..40).fake(),
+            })
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::BAD_REQUEST
+    )
+}
+
+#[tokio::test]
+async fn test_account_signup_two_successive_times() {
+    let test_state = common::setup().await.unwrap();
+
+    let email: String = faker::internet::en::SafeEmail().fake();
+    let password = faker::internet::en::Password(10..40).fake();
+
+    let client = reqwest::Client::new();
+    let response = client
+        .post(format!("{}/accounts/signup", &test_state.server_url))
+        .json(&SignupPayload {
+            email: email.clone(),
+            password,
+        })
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    let updated_password = faker::internet::en::Password(10..40).fake();
 
     let update_response = client
         .post(format!("{}/accounts/signup", &test_state.server_url))
