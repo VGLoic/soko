@@ -166,13 +166,20 @@ impl AccountRepository for PostgresAccountRepository {
         account_id: uuid::Uuid,
         cyphertext: &str,
     ) -> Result<VerificationCodeRequest, AccountRepositoryError> {
-        sqlx::query_as::<_, VerificationCodeRequest>(
+        sqlx::query(
             r#"
-            BEGIN;
                 UPDATE "verification_code_request"
                 SET "status" = 'cancelled'
                 WHERE "account_id" = $1 AND "status" = 'active';
+            "#,
+        )
+        .bind(account_id)
+        .execute(&self.pool)
+        .await
+        .map_err(anyhow::Error::from)?;
 
+        sqlx::query_as::<_, VerificationCodeRequest>(
+            r#"
                 INSERT INTO "verification_code_request" (
                     "account_id",
                     "cyphertext"
@@ -186,7 +193,6 @@ impl AccountRepository for PostgresAccountRepository {
                     status,
                     created_at,
                     updated_at
-            COMMIT;
             "#,
         )
         .bind(account_id)
