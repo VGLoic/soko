@@ -15,9 +15,12 @@ pub mod model;
 mod repository;
 pub use repository::{AccountRepository, PostgresAccountRepository};
 
+use crate::routes::account::verification_code_strategy::VerificationCodeStategy;
+
 use super::AppState;
 mod password_strategy;
 use password_strategy::PasswordStrategy;
+mod verification_code_strategy;
 
 pub fn account_router() -> Router<AppState> {
     Router::new()
@@ -115,9 +118,19 @@ async fn signup_account(
 
         existing_account.update_password_hash(PasswordStrategy::hash_password(&payload.password)?);
 
+        let (code, code_cyphertext) =
+            VerificationCodeStategy::generate_verification_code(&payload.email)?;
+
+        warn!("THIS LOG IS MEANT TO BE DELETED IN THE FUTURE -- Code to input is {code}");
+
         existing_account = app_state
             .account_repository
             .update_account(&existing_account)
+            .await
+            .map_err(anyhow::Error::from)?;
+        app_state
+            .account_repository
+            .cancel_last_and_create_code_request(existing_account.id, code_cyphertext.as_str())
             .await
             .map_err(anyhow::Error::from)?;
 
@@ -130,6 +143,16 @@ async fn signup_account(
             &payload.email,
             &PasswordStrategy::hash_password(&payload.password)?,
         )
+        .await
+        .map_err(anyhow::Error::from)?;
+
+    let (code, code_cyphertext) =
+        VerificationCodeStategy::generate_verification_code(&payload.email)?;
+
+    warn!("THIS LOG IS MEANT TO BE DELETED IN THE FUTURE -- Code to input is {code}");
+    app_state
+        .account_repository
+        .cancel_last_and_create_code_request(created_account.id, code_cyphertext.as_str())
         .await
         .map_err(anyhow::Error::from)?;
 

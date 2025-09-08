@@ -1,6 +1,6 @@
-use super::model::Account;
+use super::model::{Account, VerificationCodeRequest};
 use async_trait::async_trait;
-use sqlx::{Pool, Postgres};
+use sqlx::{Pool, Postgres, types::uuid};
 use thiserror::Error;
 
 #[async_trait]
@@ -39,6 +39,20 @@ pub trait AccountRepository: Send + Sync {
         email: &str,
         password_hash: &str,
     ) -> Result<Account, AccountRepositoryError>;
+
+    /// Cancel the last "active" request if any and create a new request linked to the account
+    ///
+    /// # Arguments
+    /// * `account_id` - ID of the account,
+    /// * `code_cyphertext` - cyphertext of the verification code
+    ///
+    /// # Errors
+    /// - `Unclassified`: fallback error type
+    async fn cancel_last_and_create_code_request(
+        &self,
+        account_id: uuid::Uuid,
+        code_cyphertext: &str,
+    ) -> Result<VerificationCodeRequest, AccountRepositoryError>;
 }
 
 #[derive(Error, Debug)]
@@ -142,6 +156,41 @@ impl AccountRepository for PostgresAccountRepository {
         )
         .bind(email)
         .bind(password_hash)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| anyhow::Error::from(e).into())
+    }
+
+    async fn cancel_last_and_create_code_request(
+        &self,
+        account_id: uuid::Uuid,
+        cyphertext: &str,
+    ) -> Result<VerificationCodeRequest, AccountRepositoryError> {
+        sqlx::query_as::<_, VerificationCodeRequest>(
+            r#"
+            BEGIN;
+                UPDATE "verification_code_request"
+                SET "status" = 'cancelled'
+                WHERE "account_id" = $1 AND "status" = 'active';
+
+                INSERT INTO "verification_code_request" (
+                    "account_id",
+                    "cyphertext"
+                ) VALUES (
+                    $1,
+                    $2
+                ) RETURNING
+                    id,
+                    account_id,
+                    cyphertext,
+                    status,
+                    created_at,
+                    updated_at
+            COMMIT;
+            "#,
+        )
+        .bind(account_id)
+        .bind(cyphertext)
         .fetch_one(&self.pool)
         .await
         .map_err(|e| anyhow::Error::from(e).into())

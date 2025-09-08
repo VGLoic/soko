@@ -13,6 +13,29 @@ pub struct Account {
     pub updated_at: DateTime<Utc>,
 }
 
+#[derive(FromRow)]
+pub struct VerificationCodeRequest {
+    pub id: uuid::Uuid,
+    pub account_id: uuid::Uuid,
+    pub cyphertext: String,
+    pub status: VerificationCodeRequestStatus,
+    // This field is automatically set at creation at the database level
+    pub created_at: DateTime<Utc>,
+    // This field is automatically updated at the database level
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(sqlx::Type)]
+#[sqlx(
+    type_name = "verification_code_request_status",
+    rename_all = "lowercase"
+)]
+pub enum VerificationCodeRequestStatus {
+    Active,
+    Cancelled,
+    Confirmed,
+}
+
 impl Account {
     /// Update the password hash of an account
     ///
