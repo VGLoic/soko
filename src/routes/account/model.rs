@@ -62,4 +62,11 @@ mod tests {
         account.update_password_hash(new_password_hash.clone());
         assert_eq!(account.password_hash, new_password_hash);
     }
+
+    #[test]
+    fn test_verify_email() {
+        let mut account: Account = Faker.fake();
+        account.verify_email();
+        assert!(account.email_verified);
+    }
 }
