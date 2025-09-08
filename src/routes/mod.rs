@@ -4,7 +4,10 @@ use axum::{Json, Router, http::StatusCode, response::IntoResponse, routing::get}
 use serde::{Deserialize, Serialize};
 mod account;
 use super::Config;
-pub use account::{AccountRepository, AccountResponse, PostgresAccountRepository, SignupPayload};
+pub use account::{
+    AccountRepository, AccountResponse, PostgresAccountRepository, SignupPayload,
+    VerifyEmailPayload,
+};
 
 pub fn app_router(_: &Config, account_repository: impl AccountRepository + 'static) -> Router {
     let app_state = AppState {

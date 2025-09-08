@@ -21,6 +21,11 @@ impl Account {
     pub fn update_password_hash(&mut self, password_hash: String) {
         self.password_hash = password_hash;
     }
+
+    /// Verify the email of an account
+    pub fn verify_email(&mut self) {
+        self.email_verified = true;
+    }
 }
 
 #[cfg(test)]
@@ -56,5 +61,12 @@ mod tests {
         let new_password_hash: String = Faker.fake();
         account.update_password_hash(new_password_hash.clone());
         assert_eq!(account.password_hash, new_password_hash);
+    }
+
+    #[test]
+    fn test_verify_email() {
+        let mut account: Account = Faker.fake();
+        account.verify_email();
+        assert!(account.email_verified);
     }
 }
