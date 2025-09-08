@@ -27,7 +27,7 @@ impl VerificationCodeStategy {
         let argon_salt = Salt::from_b64(&base64_salt).map_err(|e| anyhow::anyhow!("{e}"))?;
 
         let mut code: u32 = rng.random();
-        // Code is only 8 numbers
+        // Code is up to 8 numbers
         code %= 100_000_000;
         let key = Argon2::default()
             .hash_password(&code.to_le_bytes(), argon_salt)
