@@ -141,7 +141,7 @@ async fn signup_account(
 pub struct VerifyEmailPayload {
     #[validate(email(message = "invalid email format"))]
     pub email: String,
-    #[validate(range(min = 0, exclusive_max = 100_000_000))]
+    #[validate(range(min = 1, exclusive_max = 100_000_000))]
     pub code: u32,
 }
 

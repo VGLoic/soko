@@ -51,7 +51,7 @@ async fn test_account_email_verification() {
         .post(format!("{}/accounts/verify-email", &test_state.server_url))
         .json(&VerifyEmailPayload {
             email: email.clone(),
-            code: (0..100_000_000).fake(),
+            code: (1..100_000_000).fake(),
         })
         .send()
         .await
@@ -80,7 +80,7 @@ async fn test_forbidden_signup_once_verified() {
         .post(format!("{}/accounts/verify-email", &test_state.server_url))
         .json(&VerifyEmailPayload {
             email: email.clone(),
-            code: (0..100_000_000).fake(),
+            code: (1..100_000_000).fake(),
         })
         .send()
         .await
@@ -91,7 +91,7 @@ async fn test_forbidden_signup_once_verified() {
             .post(format!("{}/accounts/verify-email", &test_state.server_url))
             .json(&VerifyEmailPayload {
                 email: email.clone(),
-                code: (0..100_000_000).fake(),
+                code: (1..100_000_000).fake(),
             })
             .send()
             .await
