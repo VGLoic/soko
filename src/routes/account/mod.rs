@@ -38,8 +38,6 @@ pub enum AccountError {
     AccountAlreadyVerified(String),
     #[error("Account not found for email: {0}")]
     AccountNotFound(String),
-    #[error("Invalid password for email: {0}")]
-    InvalidPassword(String),
 }
 
 impl IntoResponse for AccountError {
@@ -59,7 +57,6 @@ impl IntoResponse for AccountError {
                 (StatusCode::BAD_REQUEST, Json(errors)).into_response()
             }
             Self::AccountNotFound(_) => (StatusCode::NOT_FOUND, "Not found").into_response(),
-            Self::InvalidPassword(_) => (StatusCode::UNAUTHORIZED, "Unauthorized").into_response(),
         }
     }
 }
@@ -145,12 +142,6 @@ async fn signup_account(
 pub struct VerifyEmailPayload {
     #[validate(email(message = "invalid email format"))]
     pub email: String,
-    #[validate(length(
-        min = 10,
-        max = 40,
-        message = "password must contain between 10 and 40 characters"
-    ))]
-    pub password: String,
     #[validate(length(min = 1), custom(function = "validate_base64", code = "code"))]
     pub code: String,
 }
@@ -182,9 +173,6 @@ async fn verify_email(
         .await
         .map_err(anyhow::Error::from)?
         .ok_or_else(|| AccountError::AccountNotFound(payload.email.clone()))?;
-
-    PasswordStrategy::verify_password(&payload.password, &existing_account.password_hash)
-        .map_err(|_| AccountError::InvalidPassword(payload.email.clone()))?;
 
     if existing_account.email_verified {
         return Err(AccountError::AccountAlreadyVerified(payload.email));

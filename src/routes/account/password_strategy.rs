@@ -1,4 +1,4 @@
-use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier, password_hash::Salt};
+use argon2::{Argon2, PasswordHasher, password_hash::Salt};
 use base64::prelude::*;
 use rand::prelude::*;
 use rand_chacha::ChaCha20Rng;
@@ -24,17 +24,5 @@ impl PasswordStrategy {
             .hash_password(password.as_bytes(), argon_salt)
             .map_err(|e| anyhow::anyhow!("{e}"))
             .map(|v| v.to_string())
-    }
-
-    /// Verify a password using the Argon2id algorithm.
-    ///
-    /// # Arguments
-    /// * `password` - Password to verify
-    /// * `hash` - Argon2id hash of the password
-    pub fn verify_password(password: &str, hash: &str) -> Result<(), anyhow::Error> {
-        let password_hash = PasswordHash::new(hash).map_err(|e| anyhow::anyhow!("{e}"))?;
-        Argon2::default()
-            .verify_password(password.as_bytes(), &password_hash)
-            .map_err(|e| anyhow::anyhow!("{e}"))
     }
 }
