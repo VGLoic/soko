@@ -8,6 +8,9 @@ use sha3::Sha3_256;
 #[derive(Debug)]
 pub struct VerificationCodeStategy;
 
+const MAC_LENGTH: usize = 32;
+const SERIALIZED_KEY_LENGTH: usize = 97;
+
 impl VerificationCodeStategy {
     /// Generate a verification code linked to an email with its encryption
     ///
@@ -42,9 +45,9 @@ impl VerificationCodeStategy {
 
         // Mac is 32 bytes
         // Key is a string of 97 bytes
-        let mut cyphertext = [0u8; 129];
-        cyphertext[..97].copy_from_slice(key.serialize().as_bytes());
-        cyphertext[97..].copy_from_slice(&mac);
+        let mut cyphertext = [0u8; MAC_LENGTH + SERIALIZED_KEY_LENGTH];
+        cyphertext[..SERIALIZED_KEY_LENGTH].copy_from_slice(key.serialize().as_bytes());
+        cyphertext[SERIALIZED_KEY_LENGTH..].copy_from_slice(&mac);
 
         Ok((code, BASE64_STANDARD_NO_PAD.encode(cyphertext)))
     }
@@ -64,9 +67,10 @@ impl VerificationCodeStategy {
         cyphertext: &str,
     ) -> Result<bool, anyhow::Error> {
         let cyphertext_bytes = BASE64_STANDARD_NO_PAD.decode(cyphertext)?;
-        if cyphertext_bytes.len() != 129 {
+        if cyphertext_bytes.len() != MAC_LENGTH + SERIALIZED_KEY_LENGTH {
             return Err(anyhow::anyhow!(
-                "Expected 129 bytes length string, got {}",
+                "Expected {} bytes length string, got {}",
+                MAC_LENGTH + SERIALIZED_KEY_LENGTH,
                 cyphertext_bytes.len()
             ));
         }
