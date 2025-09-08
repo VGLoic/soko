@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use tracing::warn;
 
 #[async_trait]
 pub trait MailingService: Send + Sync {
@@ -10,7 +11,8 @@ pub struct ToBeImplementedMailingService;
 
 #[async_trait]
 impl MailingService for ToBeImplementedMailingService {
-    async fn send_email(&self, _email: &str, _content: &str) -> Result<(), anyhow::Error> {
+    async fn send_email(&self, _email: &str, content: &str) -> Result<(), anyhow::Error> {
+        warn!("THIS LOG IS MEANT TO BE DELETED IN THE FUTURE -- Email content is {content}");
         Ok(())
     }
 }

@@ -126,8 +126,6 @@ async fn signup_account(
         let (code, code_cyphertext) =
             VerificationCodeStategy::generate_verification_code(&payload.email)?;
 
-        warn!("THIS LOG IS MEANT TO BE DELETED IN THE FUTURE -- Code to input is {code}");
-
         existing_account = app_state
             .account_repository
             .update_account(&existing_account)
@@ -152,8 +150,6 @@ async fn signup_account(
 
     let (code, code_cyphertext) =
         VerificationCodeStategy::generate_verification_code(&payload.email)?;
-
-    warn!("THIS LOG IS MEANT TO BE DELETED IN THE FUTURE -- Code to input is {code}");
 
     let created_account = app_state
         .account_repository
