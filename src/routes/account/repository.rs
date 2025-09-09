@@ -101,7 +101,7 @@ impl AccountRepository for PostgresAccountRepository {
         &self,
         email: &str,
     ) -> Result<Option<Account>, AccountRepositoryError> {
-        match sqlx::query_as::<_, Account>(
+        let query_result = sqlx::query_as::<_, Account>(
             r#"
                 SELECT
                     id,
@@ -116,8 +116,9 @@ impl AccountRepository for PostgresAccountRepository {
         )
         .bind(email)
         .fetch_one(&self.pool)
-        .await
-        {
+        .await;
+
+        match query_result {
             Ok(v) => Ok(Some(v)),
             Err(e) => {
                 if let sqlx::Error::RowNotFound = e {
@@ -230,7 +231,7 @@ impl AccountRepository for PostgresAccountRepository {
         &self,
         account_id: uuid::Uuid,
     ) -> Result<Option<VerificationCodeRequest>, AccountRepositoryError> {
-        match sqlx::query_as::<_, VerificationCodeRequest>(
+        let query_result = sqlx::query_as::<_, VerificationCodeRequest>(
             r#"
                 SELECT
                     id,
@@ -245,8 +246,9 @@ impl AccountRepository for PostgresAccountRepository {
         )
         .bind(account_id)
         .fetch_one(&self.pool)
-        .await
-        {
+        .await;
+    
+        match query_result {
             Ok(v) => Ok(Some(v)),
             Err(e) => match e {
                 sqlx::Error::RowNotFound => Ok(None),

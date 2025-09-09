@@ -122,7 +122,6 @@ async fn signup_account(
         }
 
         existing_account.update_password_hash(PasswordStrategy::hash_password(&payload.password)?);
-
         let (code, code_cyphertext) =
             VerificationCodeStrategy::generate_verification_code(&payload.email)?;
 
