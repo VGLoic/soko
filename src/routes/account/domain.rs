@@ -8,7 +8,7 @@ use super::{
     verification_code_strategy::VerificationCodeStrategy,
 };
 
-#[derive(FromRow)]
+#[derive(FromRow, Clone, Debug)]
 pub struct Account {
     pub id: uuid::Uuid,
     pub email: String,
@@ -20,7 +20,7 @@ pub struct Account {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(FromRow)]
+#[derive(FromRow, Clone, Debug)]
 pub struct VerificationCodeRequest {
     pub id: uuid::Uuid,
     pub account_id: uuid::Uuid,
@@ -32,7 +32,7 @@ pub struct VerificationCodeRequest {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(sqlx::Type)]
+#[derive(sqlx::Type, Clone, Debug)]
 #[sqlx(
     type_name = "verification_code_request_status",
     rename_all = "lowercase"
@@ -108,6 +108,99 @@ pub enum SignupError {
     Unknown(#[from] anyhow::Error),
 }
 
+#[cfg(test)]
+mod signup_tests {
+    use chrono::Days;
+    use fake::{Dummy, Fake, Faker, faker};
+
+    use crate::routes::account::verification_code_strategy::VerificationCodeStrategy;
+
+    use super::*;
+
+    impl<T> Dummy<T> for Account {
+        fn dummy_with_rng<R: fake::Rng + ?Sized>(_: &T, rng: &mut R) -> Self {
+            let created_at = faker::chrono::en::DateTimeBefore(
+                Utc::now().checked_sub_days(Days::new(2)).unwrap(),
+            )
+            .fake_with_rng(rng);
+            Account {
+                id: uuid::Uuid::new_v4(),
+                email: faker::internet::en::SafeEmail().fake_with_rng(rng),
+                password_hash: "$2y$10$EZGQ6TDVUAicnOu4LgVoI.kFmcbFkT9nlOXeLfnKZtJYF8YjMM3mG"
+                    .to_string(),
+                email_verified: true,
+                created_at,
+                updated_at: faker::chrono::en::DateTimeBetween(created_at, Utc::now())
+                    .fake_with_rng(rng),
+            }
+        }
+    }
+
+    #[test]
+    fn test_signup_request_from_body() {
+        let email: String = faker::internet::en::SafeEmail().fake();
+        let password: String = faker::internet::en::Password(10..40).fake();
+        let signup_body = SignupBody {
+            email: email.clone(),
+            password: password.clone(),
+        };
+        let request = SignupRequest::try_from_body(signup_body.clone()).unwrap();
+        assert_eq!(request.email, email);
+        assert!(
+            VerificationCodeStrategy::verify_verification_code(
+                request.verification_plaintext,
+                &email,
+                &request.verification_cyphertext
+            )
+            .is_ok()
+        );
+        assert!(PasswordStrategy::verify_password(&password, &request.password_hash).is_ok());
+    }
+
+    #[test]
+    fn test_signup_request_from_body_and_account() {
+        let mut account: Account = Faker.fake();
+        account.email_verified = false;
+        let email: String = faker::internet::en::SafeEmail().fake();
+        let password: String = faker::internet::en::Password(10..40).fake();
+        let signup_body = SignupBody {
+            email: email.clone(),
+            password: password.clone(),
+        };
+        let request =
+            SignupRequest::try_from_body_existing_account(account, signup_body.clone()).unwrap();
+        assert_eq!(request.email, email);
+        assert!(
+            VerificationCodeStrategy::verify_verification_code(
+                request.verification_plaintext,
+                &email,
+                &request.verification_cyphertext
+            )
+            .is_ok()
+        );
+        assert!(PasswordStrategy::verify_password(&password, &request.password_hash).is_ok());
+    }
+
+    #[test]
+    fn test_signup_request_from_body_and_verified_account_must_fail() {
+        let mut account: Account = Faker.fake();
+        account.email_verified = true;
+        let email: String = faker::internet::en::SafeEmail().fake();
+        let password: String = faker::internet::en::Password(10..40).fake();
+        let signup_body = SignupBody {
+            email: email.clone(),
+            password: password.clone(),
+        };
+
+        let err = SignupRequest::try_from_body_existing_account(account, signup_body.clone())
+            .unwrap_err();
+        if let SignupRequestError::AccountAlreadyVerified { email: _email } = err {
+        } else {
+            panic!("Invalid error, expected `AccountAlreadyVerified` variant, got {err}");
+        }
+    }
+}
+
 // ##########################################################
 // ################## ACCOUNT VERIFICATION ##################
 // ##########################################################
@@ -169,37 +262,14 @@ pub enum VerifyAccountError {
     Unknown(#[from] anyhow::Error),
 }
 
-// #############################################
-// ################### TESTS ###################
-// #############################################
-
 #[cfg(test)]
-mod tests {
+mod verify_account_tests {
     use chrono::Days;
-    use fake::{Dummy, Fake, faker};
+    use fake::{Dummy, Fake, Faker, faker};
 
     use crate::routes::account::verification_code_strategy::VerificationCodeStrategy;
 
     use super::*;
-
-    impl<T> Dummy<T> for Account {
-        fn dummy_with_rng<R: fake::Rng + ?Sized>(_: &T, rng: &mut R) -> Self {
-            let created_at = faker::chrono::en::DateTimeBefore(
-                Utc::now().checked_sub_days(Days::new(2)).unwrap(),
-            )
-            .fake_with_rng(rng);
-            Account {
-                id: uuid::Uuid::new_v4(),
-                email: faker::internet::en::SafeEmail().fake_with_rng(rng),
-                password_hash: "$2y$10$EZGQ6TDVUAicnOu4LgVoI.kFmcbFkT9nlOXeLfnKZtJYF8YjMM3mG"
-                    .to_string(),
-                email_verified: true,
-                created_at,
-                updated_at: faker::chrono::en::DateTimeBetween(created_at, Utc::now())
-                    .fake_with_rng(rng),
-            }
-        }
-    }
 
     impl<T> Dummy<T> for VerificationCodeRequest {
         fn dummy_with_rng<R: fake::Rng + ?Sized>(_: &T, rng: &mut R) -> Self {
@@ -221,44 +291,114 @@ mod tests {
         }
     }
 
-    // #[test]
-    // fn test_update_password_hash() {
-    //     let mut account: Account = Faker.fake();
-    //     let new_password_hash: String = Faker.fake();
-    //     account.update_password_hash(new_password_hash.clone());
-    //     assert_eq!(account.password_hash, new_password_hash);
-    // }
+    fn setup() -> (Account, VerificationCodeRequest, VerifyEmailBody) {
+        let email: String = faker::internet::en::SafeEmail().fake();
+        let password: String = faker::internet::en::Password(10..40).fake();
+        let signup_body = SignupBody {
+            email: email.clone(),
+            password: password.clone(),
+        };
+        let signup_request = SignupRequest::try_from_body(signup_body).unwrap();
 
-    // #[test]
-    // fn test_verify_email() {
-    //     let mut account: Account = Faker.fake();
-    //     account.verify_email();
-    //     assert!(account.email_verified);
-    // }
+        let verify_account_body = VerifyEmailBody {
+            email: email.clone(),
+            code: signup_request.verification_plaintext,
+        };
 
-    // #[test]
-    // fn test_confirm_verification_request() {
-    //     let mut verification_request: VerificationCodeRequest = Faker.fake();
-    //     verification_request.confirm();
-    //     match verification_request.status {
-    //         VerificationCodeRequestStatus::Confirmed => {}
-    //         _ => {
-    //             panic!("Expected `confirmed` verification request")
-    //         }
-    //     };
-    // }
+        let mut account: Account = Faker.fake();
+        account.email_verified = false;
 
-    // #[test]
-    // fn test_verification_request_expiration() {
-    //     let mut verification_request: VerificationCodeRequest = Faker.fake();
-    //     verification_request.created_at = Utc::now()
-    //         .checked_sub_signed(TimeDelta::minutes(14))
-    //         .unwrap();
-    //     assert!(!verification_request.is_expired());
+        let mut verification_request: VerificationCodeRequest = Faker.fake();
+        verification_request.created_at = Utc::now();
+        verification_request.cyphertext = signup_request.verification_cyphertext.clone();
 
-    //     verification_request.created_at = Utc::now()
-    //         .checked_sub_signed(TimeDelta::minutes(16))
-    //         .unwrap();
-    //     assert!(verification_request.is_expired());
-    // }
+        (account, verification_request, verify_account_body)
+    }
+
+    #[test]
+    fn test_verify_account_request_from_body() {
+        let (account, verification_request, verify_account_body) = setup();
+
+        let verify_account_request = VerifyAccountRequest::try_from_body(
+            verify_account_body,
+            account.clone(),
+            Some(verification_request),
+        )
+        .unwrap();
+
+        assert_eq!(verify_account_request.account_id, account.id);
+    }
+
+    #[test]
+    fn test_verify_account_request_from_body_with_verified_account_must_fail() {
+        let (mut account, verification_request, verify_account_body) = setup();
+        account.email_verified = true;
+
+        let err = VerifyAccountRequest::try_from_body(
+            verify_account_body,
+            account.clone(),
+            Some(verification_request),
+        )
+        .unwrap_err();
+
+        if let VerifyAccountRequestError::AccountAlreadyVerified { email: _email } = err {
+        } else {
+            panic!("Invalid error, expected `AccountAlreadyVerified` variant, got {err}");
+        }
+    }
+
+    #[test]
+    fn test_verify_account_request_from_body_with_no_active_verification_request_must_fail() {
+        let (account, _verification_request, verify_account_body) = setup();
+
+        let err = VerifyAccountRequest::try_from_body(verify_account_body, account.clone(), None)
+            .unwrap_err();
+
+        if let VerifyAccountRequestError::InvalidVerificationCode = err {
+        } else {
+            panic!("Invalid error, expected `InvalidVerificationCode` variant, got {err}");
+        }
+    }
+
+    #[test]
+    fn test_verify_account_request_from_body_with_expired_verification_request_must_fail() {
+        let (account, mut verification_request, verify_account_body) = setup();
+
+        verification_request.created_at = Utc::now()
+            .checked_sub_signed(TimeDelta::minutes(16))
+            .unwrap();
+
+        let err = VerifyAccountRequest::try_from_body(
+            verify_account_body,
+            account.clone(),
+            Some(verification_request),
+        )
+        .unwrap_err();
+
+        if let VerifyAccountRequestError::InvalidVerificationCode = err {
+        } else {
+            panic!("Invalid error, expected `InvalidVerificationCode` variant, got {err}");
+        }
+    }
+
+    #[test]
+    fn test_verify_account_request_from_body_with_invalid_plaintext_must_fail() {
+        let (account, verification_request, mut verify_account_body) = setup();
+
+        let (other_plaintext, _) =
+            VerificationCodeStrategy::generate_verification_code(&account.email).unwrap();
+        verify_account_body.code = other_plaintext;
+
+        let err = VerifyAccountRequest::try_from_body(
+            verify_account_body,
+            account.clone(),
+            Some(verification_request),
+        )
+        .unwrap_err();
+
+        if let VerifyAccountRequestError::InvalidVerificationCode = err {
+        } else {
+            panic!("Invalid error, expected `InvalidVerificationCode` variant, got {err}");
+        }
+    }
 }

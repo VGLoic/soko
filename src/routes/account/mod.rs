@@ -96,7 +96,7 @@ impl From<SignupError> for ApiError {
     }
 }
 
-#[derive(Debug, Validate, Serialize, Deserialize)]
+#[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SignupBody {
     #[validate(email(message = "invalid email format"))]
