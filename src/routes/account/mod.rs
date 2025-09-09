@@ -15,7 +15,7 @@ pub mod model;
 mod repository;
 pub use repository::{AccountRepository, PostgresAccountRepository};
 
-use crate::routes::account::verification_code_strategy::VerificationCodeStrategy;
+use verification_code_strategy::VerificationCodeStrategy;
 
 use super::AppState;
 mod password_strategy;
@@ -127,22 +127,18 @@ async fn signup_account(
 
         existing_account = app_state
             .account_repository
-            .update_account(&existing_account)
-            .await
-            .map_err(anyhow::Error::from)?;
-        app_state
-            .account_repository
-            .cancel_last_and_create_verification_request(
+            .reset_account_creation(
                 existing_account.id,
-                code_cyphertext.as_str(),
+                &existing_account.password_hash,
+                &code_cyphertext,
             )
             .await
             .map_err(anyhow::Error::from)?;
 
-        app_state
+        let _ = app_state
             .mailing_service
             .send_email(&payload.email, code.to_string().as_str())
-            .await?;
+            .await;
 
         return Ok((StatusCode::CREATED, Json(existing_account.into())));
     }
@@ -155,19 +151,15 @@ async fn signup_account(
         .create_account(
             &payload.email,
             &PasswordStrategy::hash_password(&payload.password)?,
+            &code_cyphertext,
         )
         .await
         .map_err(anyhow::Error::from)?;
-    app_state
-        .account_repository
-        .cancel_last_and_create_verification_request(created_account.id, code_cyphertext.as_str())
-        .await
-        .map_err(anyhow::Error::from)?;
 
-    app_state
+    let _ = app_state
         .mailing_service
         .send_email(&payload.email, code.to_string().as_str())
-        .await?;
+        .await;
 
     Ok((StatusCode::CREATED, Json(created_account.into())))
 }
@@ -185,9 +177,9 @@ async fn verify_email(
     State(app_state): State<AppState>,
     ValidatedJson(payload): ValidatedJson<VerifyEmailPayload>,
 ) -> Result<(StatusCode, Json<AccountResponse>), AccountError> {
-    let mut existing_account = app_state
+    let (mut existing_account, verification_request) = app_state
         .account_repository
-        .get_account_by_email(&payload.email)
+        .get_account_by_email_with_verification_request(&payload.email)
         .await
         .map_err(anyhow::Error::from)?
         .ok_or_else(|| AccountError::AccountNotFound(payload.email.clone()))?;
@@ -196,11 +188,7 @@ async fn verify_email(
         return Err(AccountError::AccountAlreadyVerified(payload.email));
     }
 
-    let mut verification_request = app_state
-        .account_repository
-        .get_active_validation_request(existing_account.id)
-        .await
-        .map_err(anyhow::Error::from)?
+    let mut verification_request = verification_request
         .ok_or_else(|| anyhow::anyhow!("Active verification request not found"))?;
 
     if verification_request.is_expired() {
@@ -220,12 +208,7 @@ async fn verify_email(
 
     existing_account = app_state
         .account_repository
-        .update_account(&existing_account)
-        .await
-        .map_err(anyhow::Error::from)?;
-    app_state
-        .account_repository
-        .update_verification_request(&verification_request)
+        .verify_account(existing_account.id)
         .await
         .map_err(anyhow::Error::from)?;
 
