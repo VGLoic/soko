@@ -7,19 +7,20 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
-use thiserror::Error;
 use tracing::{error, warn};
 use validator::{Validate, ValidationError, ValidationErrors};
 
-pub mod model;
+pub mod domain;
 mod repository;
 pub use repository::{AccountRepository, PostgresAccountRepository};
 
-use verification_code_strategy::VerificationCodeStrategy;
+use domain::{
+    Account, AccountQueryError, SignupError, SignupRequest, SignupRequestError, VerifyAccountError,
+    VerifyAccountRequest, VerifyAccountRequestError,
+};
 
 use super::AppState;
 mod password_strategy;
-use password_strategy::PasswordStrategy;
 mod verification_code_strategy;
 
 pub fn account_router() -> Router<AppState> {
@@ -32,38 +33,31 @@ pub fn account_router() -> Router<AppState> {
 // ################## ERRORS ##################
 // ############################################
 
-#[derive(Error, Debug)]
-pub enum AccountError {
-    #[error(transparent)]
-    Unclassified(#[from] anyhow::Error),
-    #[error("A verified account already exist for the email: {0}")]
-    AccountAlreadyVerified(String),
-    #[error("Account not found for email: {0}")]
-    AccountNotFound(String),
-    #[error("Invalid verification code for email: {0}")]
-    InvalidVerificationCode(String),
+#[derive(Debug)]
+pub enum ApiError {
+    InternalServerError(anyhow::Error),
+    BadRequest(ValidationErrors),
+    NotFound,
 }
 
-impl IntoResponse for AccountError {
-    fn into_response(self) -> axum::response::Response {
-        error!("{self}");
+impl IntoResponse for ApiError {
+    fn into_response(self) -> Response {
         match self {
-            Self::Unclassified(_) => {
+            Self::InternalServerError(e) => {
+                error!("{e}");
                 (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error").into_response()
             }
-            Self::AccountAlreadyVerified(_) => {
-                let mut errors = ValidationErrors::new();
-                errors.add(
-                    "email",
-                    ValidationError::new("existing-email")
-                        .with_message("Email is already associated with a verified account".into()),
-                );
-                (StatusCode::BAD_REQUEST, Json(errors)).into_response()
-            }
-            Self::AccountNotFound(_) => (StatusCode::NOT_FOUND, "Not found").into_response(),
-            Self::InvalidVerificationCode(_) => {
-                (StatusCode::BAD_REQUEST, "Invalid code").into_response()
-            }
+            Self::BadRequest(errors) => (StatusCode::BAD_REQUEST, Json(errors)).into_response(),
+            Self::NotFound => (StatusCode::NOT_FOUND, "Not found").into_response(),
+        }
+    }
+}
+
+impl From<AccountQueryError> for ApiError {
+    fn from(value: AccountQueryError) -> Self {
+        match value {
+            AccountQueryError::AccountNotFound => ApiError::NotFound,
+            AccountQueryError::Unknown(e) => ApiError::InternalServerError(e),
         }
     }
 }
@@ -80,8 +74,8 @@ pub struct AccountResponse {
     pub updated_at: DateTime<Utc>,
 }
 
-impl From<model::Account> for AccountResponse {
-    fn from(value: model::Account) -> Self {
+impl From<domain::Account> for AccountResponse {
+    fn from(value: domain::Account) -> Self {
         AccountResponse {
             email: value.email,
             created_at: value.created_at,
@@ -91,12 +85,20 @@ impl From<model::Account> for AccountResponse {
 }
 
 // ##############################################
-// ################## HANDLERS ##################
+// ################## SIGN UP ###################
 // ##############################################
+
+impl From<SignupError> for ApiError {
+    fn from(value: SignupError) -> Self {
+        match value {
+            SignupError::Unknown(e) => ApiError::InternalServerError(e),
+        }
+    }
+}
 
 #[derive(Debug, Validate, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SignupPayload {
+pub struct SignupBody {
     #[validate(email(message = "invalid email format"))]
     pub email: String,
     #[validate(length(
@@ -107,112 +109,135 @@ pub struct SignupPayload {
     pub password: String,
 }
 
+impl From<SignupRequestError> for ApiError {
+    fn from(value: SignupRequestError) -> ApiError {
+        match value {
+            SignupRequestError::Unknown(e) => ApiError::InternalServerError(e),
+            SignupRequestError::AccountAlreadyVerified { email: _email } => {
+                let mut errors = ValidationErrors::new();
+                errors.add(
+                    "email",
+                    ValidationError::new("existing-email")
+                        .with_message("Email is already associated with a verified account".into()),
+                );
+                ApiError::BadRequest(errors)
+            }
+        }
+    }
+}
+
 async fn signup_account(
     State(app_state): State<AppState>,
-    ValidatedJson(payload): ValidatedJson<SignupPayload>,
-) -> Result<(StatusCode, Json<AccountResponse>), AccountError> {
-    if let Some(mut existing_account) = app_state
+    ValidatedJson(body): ValidatedJson<SignupBody>,
+) -> Result<(StatusCode, Json<AccountResponse>), ApiError> {
+    let signup_request: SignupRequest;
+    let signed_up_account: Account;
+
+    let existing_account_opt = match app_state
         .account_repository
-        .get_account_by_email(&payload.email)
+        .get_account_by_email(&body.email)
         .await
-        .map_err(anyhow::Error::from)?
     {
-        if existing_account.email_verified {
-            return Err(AccountError::AccountAlreadyVerified(existing_account.email));
+        Ok(v) => Some(v),
+        Err(e) => {
+            if let AccountQueryError::AccountNotFound = e {
+                None
+            } else {
+                return Err(e.into());
+            }
         }
+    };
 
-        existing_account.update_password_hash(PasswordStrategy::hash_password(&payload.password)?);
-        let (code, code_cyphertext) =
-            VerificationCodeStrategy::generate_verification_code(&payload.email)?;
+    if let Some(existing_account) = existing_account_opt {
+        signup_request = SignupRequest::try_from_body_existing_account(existing_account, body)?;
 
-        existing_account = app_state
+        signed_up_account = app_state
             .account_repository
-            .reset_account_creation(
-                existing_account.id,
-                &existing_account.password_hash,
-                &code_cyphertext,
-            )
-            .await
-            .map_err(anyhow::Error::from)?;
-
-        let _ = app_state
-            .mailing_service
-            .send_email(&payload.email, code.to_string().as_str())
-            .await;
-
-        return Ok((StatusCode::CREATED, Json(existing_account.into())));
-    }
-
-    let (code, code_cyphertext) =
-        VerificationCodeStrategy::generate_verification_code(&payload.email)?;
-
-    let created_account = app_state
-        .account_repository
-        .create_account(
-            &payload.email,
-            &PasswordStrategy::hash_password(&payload.password)?,
-            &code_cyphertext,
-        )
-        .await
-        .map_err(anyhow::Error::from)?;
+            .reset_account_creation(&signup_request)
+            .await?;
+    } else {
+        signup_request = SignupRequest::try_from_body(body)?;
+        signed_up_account = app_state
+            .account_repository
+            .create_account(&signup_request)
+            .await?
+    };
 
     let _ = app_state
         .mailing_service
-        .send_email(&payload.email, code.to_string().as_str())
+        .send_email(
+            &signup_request.email,
+            signup_request.verification_plaintext.to_string().as_str(),
+        )
         .await;
 
-    Ok((StatusCode::CREATED, Json(created_account.into())))
+    Ok((StatusCode::CREATED, Json(signed_up_account.into())))
 }
+
+// ####################################################
+// ################## VERIFY ACCOUNT ##################
+// ####################################################
 
 #[derive(Debug, Validate, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct VerifyEmailPayload {
+pub struct VerifyEmailBody {
     #[validate(email(message = "invalid email format"))]
     pub email: String,
     #[validate(range(min = 1, exclusive_max = 100_000_000))]
     pub code: u32,
 }
 
+impl From<VerifyAccountRequestError> for ApiError {
+    fn from(value: VerifyAccountRequestError) -> Self {
+        match value {
+            VerifyAccountRequestError::Unknown(e) => ApiError::InternalServerError(e),
+            VerifyAccountRequestError::AccountAlreadyVerified { email: _email } => {
+                let mut errors = ValidationErrors::new();
+                errors.add(
+                    "email",
+                    ValidationError::new("email-verified")
+                        .with_message("Account is already verified".into()),
+                );
+                ApiError::BadRequest(errors)
+            }
+            VerifyAccountRequestError::InvalidVerificationCode => {
+                let mut errors = ValidationErrors::new();
+                errors.add(
+                    "code",
+                    ValidationError::new("code-validity").with_message("Code is invalid".into()),
+                );
+                ApiError::BadRequest(errors)
+            }
+        }
+    }
+}
+
+impl From<VerifyAccountError> for ApiError {
+    fn from(value: VerifyAccountError) -> Self {
+        match value {
+            VerifyAccountError::Unknown(e) => ApiError::InternalServerError(e),
+        }
+    }
+}
+
 async fn verify_email(
     State(app_state): State<AppState>,
-    ValidatedJson(payload): ValidatedJson<VerifyEmailPayload>,
-) -> Result<(StatusCode, Json<AccountResponse>), AccountError> {
-    let (mut existing_account, verification_request) = app_state
+    ValidatedJson(body): ValidatedJson<VerifyEmailBody>,
+) -> Result<(StatusCode, Json<AccountResponse>), ApiError> {
+    let (existing_account, verification_request) = app_state
         .account_repository
-        .get_account_by_email_with_verification_request(&payload.email)
-        .await
-        .map_err(anyhow::Error::from)?
-        .ok_or_else(|| AccountError::AccountNotFound(payload.email.clone()))?;
+        .get_account_by_email_with_verification_request(&body.email)
+        .await?;
 
-    if existing_account.email_verified {
-        return Err(AccountError::AccountAlreadyVerified(payload.email));
-    }
+    let verify_account_request =
+        VerifyAccountRequest::try_from_body(body, existing_account, verification_request)?;
 
-    let mut verification_request = verification_request
-        .ok_or_else(|| anyhow::anyhow!("Active verification request not found"))?;
-
-    if verification_request.is_expired() {
-        return Err(AccountError::InvalidVerificationCode(payload.email));
-    }
-
-    if !VerificationCodeStrategy::verify_verification_code(
-        payload.code,
-        &existing_account.email,
-        &verification_request.cyphertext,
-    )? {
-        return Err(AccountError::InvalidVerificationCode(payload.email));
-    }
-
-    existing_account.verify_email();
-    verification_request.confirm();
-
-    existing_account = app_state
+    let updated_account = app_state
         .account_repository
-        .verify_account(existing_account.id)
-        .await
-        .map_err(anyhow::Error::from)?;
+        .verify_account(verify_account_request.account_id)
+        .await?;
 
-    Ok((StatusCode::OK, Json(existing_account.into())))
+    Ok((StatusCode::OK, Json(updated_account.into())))
 }
 
 struct ValidatedJson<T>(T);

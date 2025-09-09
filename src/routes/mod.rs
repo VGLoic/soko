@@ -6,8 +6,7 @@ mod account;
 
 use super::{Config, third_party::MailingService};
 pub use account::{
-    AccountRepository, AccountResponse, PostgresAccountRepository, SignupPayload,
-    VerifyEmailPayload,
+    AccountRepository, AccountResponse, PostgresAccountRepository, SignupBody, VerifyEmailBody,
 };
 
 pub fn app_router(
