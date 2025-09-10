@@ -143,7 +143,7 @@ pub struct Account {
     pub id: uuid::Uuid,
     pub email: String,
     pub password_hash: String,
-    pub email_verified: bool,
+    pub verified: bool,
     // This field is automatically set at creation at the database level
     pub created_at: DateTime<Utc>,
     // This field is automatically updated at the database level
@@ -193,7 +193,7 @@ pub struct Account {
             account: Account,
             body: SignupBody,
         ) -> Result<Self, SignupRequestError> {
-            if account.email_verified {
+            if account.verified {
                 return Err(SignupRequestError::AccountAlreadyVerified {
                     email: account.email,
                 });

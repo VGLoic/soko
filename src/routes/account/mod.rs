@@ -231,13 +231,13 @@ async fn verify_email(
     State(app_state): State<AppState>,
     ValidatedJson(body): ValidatedJson<VerifyEmailBody>,
 ) -> Result<(StatusCode, Json<AccountResponse>), ApiError> {
-    let (existing_account, verification_request) = app_state
+    let (existing_account, verification_ticket) = app_state
         .account_repository
-        .get_account_by_email_with_verification_request(&body.email)
+        .get_account_by_email_with_verification_ticket(&body.email)
         .await?;
 
     let verify_account_request =
-        VerifyAccountRequest::try_from_body(body, existing_account, verification_request)?;
+        VerifyAccountRequest::try_from_body(body, existing_account, verification_ticket)?;
 
     let updated_account = app_state
         .account_repository
