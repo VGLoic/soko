@@ -125,6 +125,8 @@ Soko uses [`sqlx`](https://github.com/launchbadge/sqlx) for database connectivit
 
 ### Domain implementation
 
+The code follows some kind of hexagonal architecture as described in this [article](https://www.howtocodeit.com/articles/master-hexagonal-architecture-rust).
+
 The routes are split in various business domains. A domain is meant to be contained as much as possible.
 
 Implementation of a domain must follow a set of rules:
@@ -148,98 +150,133 @@ pub struct Account {
     pub updated_at: DateTime<Utc>,
 }
 ```
-- each domain entity must implement its set of methods in order to define what business rules are allowed for this entity. We define this collection of methods the `entity model`. The time of last update is automatically handled at the database level and should not be taken into account in model methods,
+- the domain defines the data transfer objects (DTO) for each action, e.g. `signup`:
+    - they carry the needed informations in order to perform the action and must define the validation rules for the action. They are most of the time built using the HTTP body and possibly other retrieval sources, e.g. database calls,
+    - a dedicated error type is associated to the construction of these DTOs,
+    - in addition, a dedicated error type must be added for errors occurring in adapters, e.g. database repository.
     ```rust
-    impl Account {
-        /// Update the password hash of an account
-        ///
-        /// # Arguments
-        /// * `password_hash` - Updated password hash
-        pub fn update_password_hash(&mut self, password_hash: String) {
-            self.password_hash = password_hash;
+    /// DTO of the signup action
+    /// It carries the needed informations in order to perform the signup action.
+    #[derive(Debug)]
+    pub struct SignupRequest {
+        pub email: String,
+        pub password_hash: String,
+        pub verification_plaintext: u32,
+        pub verification_cyphertext: String,
+    }
+
+    /// Errors in the construction of the [SignupRequest]
+    #[derive(Error, Debug)]
+    pub enum SignupRequestError {
+        #[error("A verified account already exist for the email: {email}")]
+        AccountAlreadyVerified { email: String },
+        #[error(transparent)]
+        Unknown(#[from] anyhow::Error),
+    }
+
+    impl SignupRequest {
+        /// Build a [SignupRequest] using a [SignupBody] HTTP body
+        pub fn try_from_body(body: SignupBody) -> Result<Self, SignupRequestError> {
+            let password_hash = PasswordStrategy::hash_password(&body.password)?;
+            let (verification_plaintext, verification_cyphertext) =
+                VerificationCodeStrategy::generate_verification_code(&body.email)?;
+            Ok(Self {
+                email: body.email,
+                password_hash,
+                verification_plaintext,
+                verification_cyphertext,
+            })
+        }
+
+        /// Build a [SignupRequest] using a [SignupBody] HTTP body and a previously signed up account
+        pub fn try_from_body_with_existing_account(
+            account: Account,
+            body: SignupBody,
+        ) -> Result<Self, SignupRequestError> {
+            if account.email_verified {
+                return Err(SignupRequestError::AccountAlreadyVerified {
+                    email: account.email,
+                });
+            }
+            Self::try_from_body(body)
         }
     }
-    ```
-- if needed, the domain must define a `repository` in order to abstract the database interactions related to the domain entities. This repository must be exposed as a documented `trait` and have its own errors defined as an `enum`,
-    ```rust
-    #[async_trait]
-    pub trait AccountRepository: Send + Sync {
-        /// Get an account by email
-        ///
-        /// # Arguments
-        /// * `email` - Email of the account
-        ///
-        /// # Errors
-        /// * `Unclassified` - fallback error type
-        async fn get_account_by_email(
-            &self,
-            email: &str,
-        ) -> Result<Option<Account>, AccountRepositoryError>;
 
-        /// Update an account identified by its ID
-        ///
-        /// # Arguments
-        /// * `account` - Updated account,
-        ///
-        /// # Errors
-        /// * `Unclassified` - fallback error type
-        async fn update_account(&self, account: &Account) -> Result<Account, AccountRepositoryError>;
-
-        /// Create an account
-        ///
-        /// # Arguments
-        /// * `email` - Email of the account,
-        /// * `password_hash` - Hash of the password
-        ///
-        /// # Errors
-        /// * `Unclassified` - fallback error type
-        async fn create_account(
-            &self,
-            email: &str,
-            password_hash: &str,
-        ) -> Result<Account, AccountRepositoryError>;
-    }
-
+    /// Errors in the interactions with adapters, e.g. database repository
     #[derive(Error, Debug)]
-    pub enum AccountRepositoryError {
+    pub enum SignupError {
         #[error(transparent)]
-        Unclassified(#[from] anyhow::Error),
-        // Other errors to be added depending of the needs
+        Unknown(#[from] anyhow::Error),
     }
     ```
-- each route handler must be defined in a dedicated handler function. A handler function returns a result of the form `Result<(StatusCode, Json<ResponseType>), DomainRouteError>`,
+- if needed, the domain must define a `repository` in order to abstract the database interactions related to the domain entities. This repository must be exposed as a documented `trait`. Errors must be the ones defined by the domain
+```rust
+#[async_trait]
+pub trait AccountRepository: Send + Sync {
+    /// Create an account and creates an active verification request
+    ///
+    /// # Arguments
+    /// * `email` - Email of the account,
+    /// * `password_hash` - Hash of the password,
+    /// * `verification_cyphertext` - Cyphertext of the verification request
+    ///
+    /// # Errors
+    /// * `SignupError::Unknown` - unknown error type
+    async fn create_account(&self, signup_request: &SignupRequest) -> Result<Account, SignupError>;
+}
+```
+- each route handler must be defined in a dedicated handler function. A handler function returns a result of the form `Result<(StatusCode, Json<ResponseType>), ApiError>`,
     ```rust
     async fn signup_account(
         State(app_state): State<AppState>,
-        ValidatedJson(payload): ValidatedJson<SignupPayload>,
-    ) -> Result<(StatusCode, Json<AccountResponse>), AccountError> {
+        ValidatedJson(body): ValidatedJson<SignupBody>,
+    ) -> Result<(StatusCode, Json<AccountResponse>), ApiError> {
         ...
     ```
-- the domain route errors must be defined as an enum that implements the `IntoResponse` trait of `axum`,
+- the domain API errors must be defined as an enum that implements the `IntoResponse` trait of `axum`
     ```rust
-    #[derive(Error, Debug)]
-    pub enum AccountError {
-        #[error(transparent)]
-        Unclassified(#[from] anyhow::Error),
-        #[error("A verified account already exist for the email: {0}")]
-        AccountAlreadyVerified(String),
+    #[derive(Debug)]
+    pub enum ApiError {
+        InternalServerError(anyhow::Error),
+        BadRequest(ValidationErrors),
+        NotFound,
     }
 
-    impl IntoResponse for AccountError {
-        fn into_response(self) -> axum::response::Response {
-            error!("{self}");
+    impl IntoResponse for ApiError {
+        fn into_response(self) -> Response {
             match self {
-                Self::Unclassified(_) => {
+                Self::InternalServerError(e) => {
+                    error!("{e}");
                     (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error").into_response()
                 }
-                Self::AccountAlreadyVerified(_) => {
+                Self::BadRequest(errors) => (StatusCode::BAD_REQUEST, Json(errors)).into_response(),
+                Self::NotFound => (StatusCode::NOT_FOUND, "Not found").into_response(),
+            }
+        }
+    }
+    ```
+- the mapping from the previously defined domain errors and the domain API errors must be defined,
+    ```rust
+    impl From<SignupError> for ApiError {
+        fn from(value: SignupError) -> Self {
+            match value {
+                SignupError::Unknown(e) => ApiError::InternalServerError(e),
+            }
+        }
+    }
+
+    impl From<SignupRequestError> for ApiError {
+        fn from(value: SignupRequestError) -> ApiError {
+            match value {
+                SignupRequestError::Unknown(e) => ApiError::InternalServerError(e),
+                SignupRequestError::AccountAlreadyVerified { email: _email } => {
                     let mut errors = ValidationErrors::new();
                     errors.add(
                         "email",
                         ValidationError::new("existing-email")
-                            .with_message("Email is already used for another account".into()),
+                            .with_message("Email is already associated with a verified account".into()),
                     );
-                    (StatusCode::BAD_REQUEST, Json(errors)).into_response()
+                    ApiError::BadRequest(errors)
                 }
             }
         }

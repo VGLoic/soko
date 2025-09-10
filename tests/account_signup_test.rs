@@ -1,6 +1,6 @@
 use fake::{Fake, faker};
 use reqwest::StatusCode;
-use soko::routes::{AccountResponse, SignupPayload, VerifyEmailPayload};
+use soko::routes::{AccountResponse, SignupBody, VerifyEmailBody};
 
 mod common;
 
@@ -14,7 +14,7 @@ async fn test_account_signup() {
     let client = reqwest::Client::new();
     let response = client
         .post(format!("{}/accounts/signup", &test_state.server_url))
-        .json(&SignupPayload {
+        .json(&SignupBody {
             email: email.clone(),
             password,
         })
@@ -38,7 +38,7 @@ async fn test_account_email_verification() {
     let client = reqwest::Client::new();
     let response = client
         .post(format!("{}/accounts/signup", &test_state.server_url))
-        .json(&SignupPayload {
+        .json(&SignupBody {
             email: email.clone(),
             password,
         })
@@ -49,7 +49,7 @@ async fn test_account_email_verification() {
 
     let response = client
         .post(format!("{}/accounts/verify-email", &test_state.server_url))
-        .json(&VerifyEmailPayload {
+        .json(&VerifyEmailBody {
             email: email.clone(),
             code: test_state
                 .mailing_service
@@ -73,7 +73,7 @@ async fn test_forbidden_signup_once_verified() {
     let client = reqwest::Client::new();
     client
         .post(format!("{}/accounts/signup", &test_state.server_url))
-        .json(&SignupPayload {
+        .json(&SignupBody {
             email: email.clone(),
             password,
         })
@@ -82,7 +82,7 @@ async fn test_forbidden_signup_once_verified() {
         .unwrap();
     client
         .post(format!("{}/accounts/verify-email", &test_state.server_url))
-        .json(&VerifyEmailPayload {
+        .json(&VerifyEmailBody {
             email: email.clone(),
             code: test_state
                 .mailing_service
@@ -97,7 +97,7 @@ async fn test_forbidden_signup_once_verified() {
     assert_eq!(
         client
             .post(format!("{}/accounts/verify-email", &test_state.server_url))
-            .json(&VerifyEmailPayload {
+            .json(&VerifyEmailBody {
                 email: email.clone(),
                 code: test_state
                     .mailing_service
@@ -115,7 +115,7 @@ async fn test_forbidden_signup_once_verified() {
     assert_eq!(
         client
             .post(format!("{}/accounts/signup", &test_state.server_url))
-            .json(&SignupPayload {
+            .json(&SignupBody {
                 email: email.clone(),
                 password: faker::internet::en::Password(10..40).fake(),
             })
@@ -137,7 +137,7 @@ async fn test_account_signup_two_successive_times() {
     let client = reqwest::Client::new();
     let response = client
         .post(format!("{}/accounts/signup", &test_state.server_url))
-        .json(&SignupPayload {
+        .json(&SignupBody {
             email: email.clone(),
             password,
         })
@@ -150,7 +150,7 @@ async fn test_account_signup_two_successive_times() {
 
     let update_response = client
         .post(format!("{}/accounts/signup", &test_state.server_url))
-        .json(&SignupPayload {
+        .json(&SignupBody {
             email: email.clone(),
             password: updated_password,
         })
