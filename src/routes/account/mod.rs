@@ -5,6 +5,7 @@ use axum::{
     response::{IntoResponse, Response},
     routing::post,
 };
+use base64::{Engine, prelude::BASE64_URL_SAFE};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use tracing::{error, warn};
@@ -190,8 +191,20 @@ async fn signup_account(
 pub struct VerifyEmailBody {
     #[validate(email(message = "invalid email format"))]
     pub email: String,
-    #[validate(length(min = 1))]
+    #[validate(custom(function = "validate_base64url"))]
     pub secret: String,
+}
+
+fn validate_base64url(value: &str) -> Result<(), ValidationError> {
+    if value.is_empty() {
+        return Err(ValidationError::new("empty_string"));
+    }
+
+    if BASE64_URL_SAFE.decode(value).is_err() {
+        return Err(ValidationError::new("invalid_base64url"));
+    }
+
+    Ok(())
 }
 
 impl From<VerifyAccountRequestError> for ApiError {
