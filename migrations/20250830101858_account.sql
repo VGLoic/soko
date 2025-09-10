@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS "account_verification_ticket" (
     id              UUID                                NOT NULL    PRIMARY KEY DEFAULT uuid_generate_v4 (),
     account_id      UUID                                NOT NULL,
     cyphertext      TEXT                                NOT NULL,
-    status          account_verification_ticket_status    NOT NULL    DEFAULT 'active',
+    status          account_verification_ticket_status  NOT NULL    DEFAULT 'active',
     created_at      TIMESTAMPTZ                         NOT NULL    DEFAULT CURRENT_TIMESTAMP,
     updated_at      TIMESTAMPTZ                         NOT NULL    DEFAULT CURRENT_TIMESTAMP
 );
