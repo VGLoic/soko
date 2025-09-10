@@ -71,34 +71,33 @@ pub async fn setup() -> Result<TestState, anyhow::Error> {
 
 #[derive(Clone, Debug)]
 pub struct FakeMailingService {
-    verification_codes: Arc<RwLock<HashMap<String, u32>>>,
+    verification_secrets: Arc<RwLock<HashMap<String, String>>>,
 }
 
 impl FakeMailingService {
     fn new() -> Self {
         Self {
-            verification_codes: Arc::new(RwLock::new(HashMap::new())),
+            verification_secrets: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
     #[allow(dead_code)]
-    pub fn get_verification_code(&self, email: &str) -> Result<Option<u32>, anyhow::Error> {
-        let code = self
-            .verification_codes
+    pub fn get_verification_secret(&self, email: &str) -> Result<Option<String>, anyhow::Error> {
+        let secret = self
+            .verification_secrets
             .try_read()?
             .get(email)
             .map(|v| v.to_owned());
-        Ok(code)
+        Ok(secret)
     }
 }
 
 #[async_trait]
 impl MailingService for FakeMailingService {
     async fn send_email(&self, email: &str, content: &str) -> Result<(), anyhow::Error> {
-        let code: u32 = content.parse().map_err(|e| anyhow::anyhow!("{e}"))?;
-        self.verification_codes
+        self.verification_secrets
             .try_write()?
-            .insert(email.to_string(), code);
+            .insert(email.to_string(), content.to_owned());
         Ok(())
     }
 }

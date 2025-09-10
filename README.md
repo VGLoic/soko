@@ -179,7 +179,7 @@ pub struct Account {
         pub fn try_from_body(body: SignupBody) -> Result<Self, SignupRequestError> {
             let password_hash = PasswordStrategy::hash_password(&body.password)?;
             let (verification_plaintext, verification_cyphertext) =
-                VerificationCodeStrategy::generate_verification_code(&body.email)?;
+                VerificationSecretStrategy::generate_verification_code(&body.email)?;
             Ok(Self {
                 email: body.email,
                 password_hash,

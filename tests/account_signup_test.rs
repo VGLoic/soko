@@ -51,9 +51,9 @@ async fn test_account_email_verification() {
         .post(format!("{}/accounts/verify-email", &test_state.server_url))
         .json(&VerifyEmailBody {
             email: email.clone(),
-            code: test_state
+            secret: test_state
                 .mailing_service
-                .get_verification_code(&email)
+                .get_verification_secret(&email)
                 .unwrap()
                 .unwrap(),
         })
@@ -84,9 +84,9 @@ async fn test_forbidden_signup_once_verified() {
         .post(format!("{}/accounts/verify-email", &test_state.server_url))
         .json(&VerifyEmailBody {
             email: email.clone(),
-            code: test_state
+            secret: test_state
                 .mailing_service
-                .get_verification_code(&email)
+                .get_verification_secret(&email)
                 .unwrap()
                 .unwrap(),
         })
@@ -99,9 +99,9 @@ async fn test_forbidden_signup_once_verified() {
             .post(format!("{}/accounts/verify-email", &test_state.server_url))
             .json(&VerifyEmailBody {
                 email: email.clone(),
-                code: test_state
+                secret: test_state
                     .mailing_service
-                    .get_verification_code(&email)
+                    .get_verification_secret(&email)
                     .unwrap()
                     .unwrap(),
             })

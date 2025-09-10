@@ -6,34 +6,35 @@ use rand_chacha::ChaCha20Rng;
 use sha3::Sha3_256;
 
 #[derive(Debug)]
-pub struct VerificationCodeStrategy;
+pub struct VerificationSecretStrategy;
 
 const MAC_LENGTH: usize = 32;
 const SERIALIZED_KEY_LENGTH: usize = 97;
 
-impl VerificationCodeStrategy {
-    /// Generate a verification code linked to an email with its encryption
+impl VerificationSecretStrategy {
+    /// Generate a verification secret linked to an email with its encryption
     ///
-    /// The code is a random 8 digits number.
-    /// An encryption of the code is performed for later verification:
+    /// The secret is a random 16 bytes collection. It is returned using a base64 URL safe encoding.
+    /// An encryption of the secret is performed for later verification:
     ///     1. a random 16 bytes (128 bits) salt is generated,
-    ///     2. a key is derived using the Argon2id scheme with the salt and the code as password,
+    ///     2. a key is derived using the Argon2id scheme with the salt and the secret as password,
     ///     3. a mac is computed using HMAC(key hash, email, SHA3-256)
     ///
     /// # Arguments
-    /// * `email` - email to link the verification code to
-    pub fn generate_verification_code(email: &str) -> Result<(u32, String), anyhow::Error> {
-        let mut salt = [0u8; 16];
+    /// * `email` - email to link the verification secret to
+    pub fn generate_verification_secret(email: &str) -> Result<(String, String), anyhow::Error> {
         let mut rng = ChaCha20Rng::from_os_rng();
+
+        let mut salt = [0u8; 16];
         rng.fill_bytes(&mut salt);
         let base64_salt = BASE64_STANDARD_NO_PAD.encode(salt);
         let argon_salt = Salt::from_b64(&base64_salt).map_err(|e| anyhow::anyhow!("{e}"))?;
 
-        let mut code: u32 = rng.random();
-        // Code is up to 8 numbers
-        code %= 100_000_000;
+        // Secret is a 16 bytes collection
+        let mut secret = [0u8; 16];
+        rng.fill_bytes(&mut secret);
         let key = Argon2::default()
-            .hash_password(&code.to_le_bytes(), argon_salt)
+            .hash_password(&secret, argon_salt)
             .map_err(|e| anyhow::anyhow!("{e}"))?;
         let key_hash = key
             .hash
@@ -49,23 +50,27 @@ impl VerificationCodeStrategy {
         cyphertext[..SERIALIZED_KEY_LENGTH].copy_from_slice(key.serialize().as_bytes());
         cyphertext[SERIALIZED_KEY_LENGTH..].copy_from_slice(&mac);
 
-        Ok((code, BASE64_STANDARD_NO_PAD.encode(cyphertext)))
+        Ok((
+            BASE64_URL_SAFE.encode(secret),
+            BASE64_STANDARD_NO_PAD.encode(cyphertext),
+        ))
     }
 
-    /// Verify a verification code, returns true if code is correct, false otherwise
+    /// Verify a verification secret, returns true if secret is correct, false otherwise
     ///
-    /// The code is verified against the Argon2id generated key.
+    /// The secret is verified against the Argon2id generated key.
     /// The mail is verified against the HMAC of the generated key hash, the email and using SHA3-256
     ///
     /// # Arguments
-    /// * `code` - 8 digits secret code,
-    /// * `email` - email to which the code is linked,
-    /// * `cyphertext` - the compactified elements of the encryption of the code, previously generated
-    pub fn verify_verification_code(
-        code: u32,
+    /// * `secret` - base64 URL safe encoded secret,
+    /// * `email` - email to which the secret is linked,
+    /// * `cyphertext` - the compactified elements of the encryption of the secret, previously generated
+    pub fn verify_verification_secret(
+        secret: &str,
         email: &str,
         cyphertext: &str,
     ) -> Result<bool, anyhow::Error> {
+        let secret_bytes = BASE64_URL_SAFE.decode(secret)?;
         let cyphertext_bytes = BASE64_STANDARD_NO_PAD.decode(cyphertext)?;
         if cyphertext_bytes.len() != MAC_LENGTH + SERIALIZED_KEY_LENGTH {
             return Err(anyhow::anyhow!(
@@ -80,7 +85,7 @@ impl VerificationCodeStrategy {
             PasswordHash::new(std::str::from_utf8(key)?).map_err(|e| anyhow::anyhow!("{e}"))?;
 
         Argon2::default()
-            .verify_password(&code.to_le_bytes(), &password_hash)
+            .verify_password(&secret_bytes, &password_hash)
             .map_err(|e| anyhow::anyhow!("{e}"))?;
         let mut hmac: Hmac<Sha3_256> = Hmac::new_from_slice(
             password_hash
@@ -101,12 +106,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_verification_code_encryption() {
+    fn test_verification_secret_encryption() {
         let email: String = faker::internet::en::SafeEmail().fake();
-        let (code, cyphertext) =
-            VerificationCodeStrategy::generate_verification_code(&email).unwrap();
+        let (secret, cyphertext) =
+            VerificationSecretStrategy::generate_verification_secret(&email).unwrap();
         assert!(
-            VerificationCodeStrategy::verify_verification_code(code, &email, &cyphertext).is_ok()
+            VerificationSecretStrategy::verify_verification_secret(&secret, &email, &cyphertext)
+                .is_ok()
         );
     }
 }

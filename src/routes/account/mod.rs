@@ -21,7 +21,7 @@ use domain::{
 
 use super::AppState;
 mod password_strategy;
-mod verification_code_strategy;
+mod verification_secret_strategy;
 
 pub fn account_router() -> Router<AppState> {
     Router::new()
@@ -190,8 +190,8 @@ async fn signup_account(
 pub struct VerifyEmailBody {
     #[validate(email(message = "invalid email format"))]
     pub email: String,
-    #[validate(range(min = 1, exclusive_max = 100_000_000))]
-    pub code: u32,
+    #[validate(length(min = 1))]
+    pub secret: String,
 }
 
 impl From<VerifyAccountRequestError> for ApiError {
@@ -207,11 +207,12 @@ impl From<VerifyAccountRequestError> for ApiError {
                 );
                 ApiError::BadRequest(errors)
             }
-            VerifyAccountRequestError::InvalidVerificationCode => {
+            VerifyAccountRequestError::InvalidVerificationSecret => {
                 let mut errors = ValidationErrors::new();
                 errors.add(
-                    "code",
-                    ValidationError::new("code-validity").with_message("Code is invalid".into()),
+                    "secret",
+                    ValidationError::new("secret-validity")
+                        .with_message("Secret is invalid".into()),
                 );
                 ApiError::BadRequest(errors)
             }
