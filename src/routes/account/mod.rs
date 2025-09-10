@@ -164,13 +164,15 @@ async fn signup_account(
             .await?
     };
 
-    let _ = app_state
+    if let Err(e) = app_state
         .mailing_service
         .send_email(
             &signup_request.email,
             signup_request.verification_plaintext.to_string().as_str(),
         )
-        .await;
+        .await {
+            error!("failed to send email to email \"{}\" with error {e}", &signup_request.email);
+        }
 
     Ok((StatusCode::CREATED, Json(signed_up_account.into())))
 }
