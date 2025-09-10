@@ -5,7 +5,7 @@ use tracing::warn;
 
 use super::{
     SignupBody, VerifyEmailBody, password_strategy::PasswordStrategy,
-    verification_code_strategy::VerificationCodeStrategy,
+    verification_secret_strategy::VerificationSecretStrategy,
 };
 
 #[derive(FromRow, Clone, Debug)]
@@ -13,7 +13,7 @@ pub struct Account {
     pub id: uuid::Uuid,
     pub email: String,
     pub password_hash: String,
-    pub email_verified: bool,
+    pub verified: bool,
     // This field is automatically set at creation at the database level
     pub created_at: DateTime<Utc>,
     // This field is automatically updated at the database level
@@ -21,11 +21,11 @@ pub struct Account {
 }
 
 #[derive(FromRow, Clone, Debug)]
-pub struct VerificationCodeRequest {
+pub struct AccountVerificationTicket {
     pub id: uuid::Uuid,
     pub account_id: uuid::Uuid,
     pub cyphertext: String,
-    pub status: VerificationCodeRequestStatus,
+    pub status: AccountVerificationTicketStatus,
     // This field is automatically set at creation at the database level
     pub created_at: DateTime<Utc>,
     // This field is automatically updated at the database level
@@ -34,10 +34,10 @@ pub struct VerificationCodeRequest {
 
 #[derive(sqlx::Type, Clone, Debug)]
 #[sqlx(
-    type_name = "verification_code_request_status",
+    type_name = "account_verification_ticket_status",
     rename_all = "lowercase"
 )]
-pub enum VerificationCodeRequestStatus {
+pub enum AccountVerificationTicketStatus {
     Active,
     Cancelled,
     Confirmed,
@@ -66,7 +66,7 @@ pub enum AccountQueryError {
 pub struct SignupRequest {
     pub email: String,
     pub password_hash: String,
-    pub verification_plaintext: u32,
+    pub verification_plaintext: String,
     pub verification_cyphertext: String,
 }
 
@@ -84,7 +84,7 @@ impl SignupRequest {
     pub fn try_from_body(body: SignupBody) -> Result<Self, SignupRequestError> {
         let password_hash = PasswordStrategy::hash_password(&body.password)?;
         let (verification_plaintext, verification_cyphertext) =
-            VerificationCodeStrategy::generate_verification_code(&body.email)?;
+            VerificationSecretStrategy::generate_verification_secret(&body.email)?;
         Ok(Self {
             email: body.email,
             password_hash,
@@ -98,7 +98,7 @@ impl SignupRequest {
         account: Account,
         body: SignupBody,
     ) -> Result<Self, SignupRequestError> {
-        if account.email_verified {
+        if account.verified {
             return Err(SignupRequestError::AccountAlreadyVerified {
                 email: account.email,
             });
@@ -119,7 +119,7 @@ mod signup_tests {
     use chrono::Days;
     use fake::{Dummy, Fake, Faker, faker};
 
-    use crate::routes::account::verification_code_strategy::VerificationCodeStrategy;
+    use crate::routes::account::verification_secret_strategy::VerificationSecretStrategy;
 
     use super::*;
 
@@ -134,7 +134,7 @@ mod signup_tests {
                 email: faker::internet::en::SafeEmail().fake_with_rng(rng),
                 password_hash: "$2y$10$EZGQ6TDVUAicnOu4LgVoI.kFmcbFkT9nlOXeLfnKZtJYF8YjMM3mG"
                     .to_string(),
-                email_verified: true,
+                verified: true,
                 created_at,
                 updated_at: faker::chrono::en::DateTimeBetween(created_at, Utc::now())
                     .fake_with_rng(rng),
@@ -153,8 +153,8 @@ mod signup_tests {
         let request = SignupRequest::try_from_body(signup_body.clone()).unwrap();
         assert_eq!(request.email, email);
         assert!(
-            VerificationCodeStrategy::verify_verification_code(
-                request.verification_plaintext,
+            VerificationSecretStrategy::verify_verification_secret(
+                &request.verification_plaintext,
                 &email,
                 &request.verification_cyphertext
             )
@@ -166,7 +166,7 @@ mod signup_tests {
     #[test]
     fn test_signup_request_from_body_and_account() {
         let mut account: Account = Faker.fake();
-        account.email_verified = false;
+        account.verified = false;
         let email: String = faker::internet::en::SafeEmail().fake();
         let password: String = faker::internet::en::Password(10..40).fake();
         let signup_body = SignupBody {
@@ -178,8 +178,8 @@ mod signup_tests {
                 .unwrap();
         assert_eq!(request.email, email);
         assert!(
-            VerificationCodeStrategy::verify_verification_code(
-                request.verification_plaintext,
+            VerificationSecretStrategy::verify_verification_secret(
+                &request.verification_plaintext,
                 &email,
                 &request.verification_cyphertext
             )
@@ -191,7 +191,7 @@ mod signup_tests {
     #[test]
     fn test_signup_request_from_body_and_verified_account_must_fail() {
         let mut account: Account = Faker.fake();
-        account.email_verified = true;
+        account.verified = true;
         let email: String = faker::internet::en::SafeEmail().fake();
         let password: String = faker::internet::en::Password(10..40).fake();
         let signup_body = SignupBody {
@@ -219,8 +219,8 @@ pub struct VerifyAccountRequest {
 
 #[derive(Error, Debug)]
 pub enum VerifyAccountRequestError {
-    #[error("invalid verification code")]
-    InvalidVerificationCode,
+    #[error("invalid verification secret")]
+    InvalidVerificationSecret,
     #[error("account is already verified for email: {email}")]
     AccountAlreadyVerified { email: String },
     #[error(transparent)]
@@ -231,29 +231,29 @@ impl VerifyAccountRequest {
     pub fn try_from_body(
         body: VerifyEmailBody,
         account: Account,
-        verification_request: Option<VerificationCodeRequest>,
+        verification_ticket: Option<AccountVerificationTicket>,
     ) -> Result<VerifyAccountRequest, VerifyAccountRequestError> {
-        if account.email_verified {
+        if account.verified {
             return Err(VerifyAccountRequestError::AccountAlreadyVerified { email: body.email });
         }
-        let verification_request =
-            verification_request.ok_or(VerifyAccountRequestError::InvalidVerificationCode)?;
+        let verification_ticket =
+            verification_ticket.ok_or(VerifyAccountRequestError::InvalidVerificationSecret)?;
 
         if Utc::now()
-            .signed_duration_since(verification_request.created_at)
+            .signed_duration_since(verification_ticket.created_at)
             .gt(&TimeDelta::minutes(15))
         {
-            return Err(VerifyAccountRequestError::InvalidVerificationCode);
+            return Err(VerifyAccountRequestError::InvalidVerificationSecret);
         }
 
-        VerificationCodeStrategy::verify_verification_code(
-            body.code,
+        VerificationSecretStrategy::verify_verification_secret(
+            &body.secret,
             &account.email,
-            &verification_request.cyphertext,
+            &verification_ticket.cyphertext,
         )
         .map_err(|e| {
             warn!("{e}");
-            VerifyAccountRequestError::InvalidVerificationCode
+            VerifyAccountRequestError::InvalidVerificationSecret
         })?;
 
         Ok(VerifyAccountRequest {
@@ -274,23 +274,23 @@ mod verify_account_tests {
     use chrono::Days;
     use fake::{Dummy, Fake, Faker, faker};
 
-    use crate::routes::account::verification_code_strategy::VerificationCodeStrategy;
+    use crate::routes::account::verification_secret_strategy::VerificationSecretStrategy;
 
     use super::*;
 
-    impl<T> Dummy<T> for VerificationCodeRequest {
+    impl<T> Dummy<T> for AccountVerificationTicket {
         fn dummy_with_rng<R: fake::Rng + ?Sized>(_: &T, rng: &mut R) -> Self {
             let created_at = faker::chrono::en::DateTimeBefore(
                 Utc::now().checked_sub_days(Days::new(2)).unwrap(),
             )
             .fake_with_rng(rng);
             let (_, cyphertext) =
-                VerificationCodeStrategy::generate_verification_code("abc@def.com").unwrap();
-            VerificationCodeRequest {
+                VerificationSecretStrategy::generate_verification_secret("abc@def.com").unwrap();
+            AccountVerificationTicket {
                 id: uuid::Uuid::new_v4(),
                 account_id: uuid::Uuid::new_v4(),
                 cyphertext,
-                status: VerificationCodeRequestStatus::Active,
+                status: AccountVerificationTicketStatus::Active,
                 created_at,
                 updated_at: faker::chrono::en::DateTimeBetween(created_at, Utc::now())
                     .fake_with_rng(rng),
@@ -298,7 +298,7 @@ mod verify_account_tests {
         }
     }
 
-    fn setup() -> (Account, VerificationCodeRequest, VerifyEmailBody) {
+    fn setup() -> (Account, AccountVerificationTicket, VerifyEmailBody) {
         let email: String = faker::internet::en::SafeEmail().fake();
         let password: String = faker::internet::en::Password(10..40).fake();
         let signup_body = SignupBody {
@@ -309,27 +309,27 @@ mod verify_account_tests {
 
         let verify_account_body = VerifyEmailBody {
             email: email.clone(),
-            code: signup_request.verification_plaintext,
+            secret: signup_request.verification_plaintext,
         };
 
         let mut account: Account = Faker.fake();
-        account.email_verified = false;
+        account.verified = false;
 
-        let mut verification_request: VerificationCodeRequest = Faker.fake();
-        verification_request.created_at = Utc::now();
-        verification_request.cyphertext = signup_request.verification_cyphertext.clone();
+        let mut verification_ticket: AccountVerificationTicket = Faker.fake();
+        verification_ticket.created_at = Utc::now();
+        verification_ticket.cyphertext = signup_request.verification_cyphertext.clone();
 
-        (account, verification_request, verify_account_body)
+        (account, verification_ticket, verify_account_body)
     }
 
     #[test]
     fn test_verify_account_request_from_body() {
-        let (account, verification_request, verify_account_body) = setup();
+        let (account, verification_ticket, verify_account_body) = setup();
 
         let verify_account_request = VerifyAccountRequest::try_from_body(
             verify_account_body,
             account.clone(),
-            Some(verification_request),
+            Some(verification_ticket),
         )
         .unwrap();
 
@@ -338,13 +338,13 @@ mod verify_account_tests {
 
     #[test]
     fn test_verify_account_request_from_body_with_verified_account_must_fail() {
-        let (mut account, verification_request, verify_account_body) = setup();
-        account.email_verified = true;
+        let (mut account, verification_ticket, verify_account_body) = setup();
+        account.verified = true;
 
         let err = VerifyAccountRequest::try_from_body(
             verify_account_body,
             account.clone(),
-            Some(verification_request),
+            Some(verification_ticket),
         )
         .unwrap_err();
 
@@ -355,57 +355,57 @@ mod verify_account_tests {
     }
 
     #[test]
-    fn test_verify_account_request_from_body_with_no_active_verification_request_must_fail() {
-        let (account, _verification_request, verify_account_body) = setup();
+    fn test_verify_account_request_from_body_with_no_active_verification_ticket_must_fail() {
+        let (account, _verification_ticket, verify_account_body) = setup();
 
         let err = VerifyAccountRequest::try_from_body(verify_account_body, account.clone(), None)
             .unwrap_err();
 
-        if let VerifyAccountRequestError::InvalidVerificationCode = err {
+        if let VerifyAccountRequestError::InvalidVerificationSecret = err {
         } else {
-            panic!("Invalid error, expected `InvalidVerificationCode` variant, got {err}");
+            panic!("Invalid error, expected `InvalidVerificationSecret` variant, got {err}");
         }
     }
 
     #[test]
-    fn test_verify_account_request_from_body_with_expired_verification_request_must_fail() {
-        let (account, mut verification_request, verify_account_body) = setup();
+    fn test_verify_account_request_from_body_with_expired_verification_ticket_must_fail() {
+        let (account, mut verification_ticket, verify_account_body) = setup();
 
-        verification_request.created_at = Utc::now()
+        verification_ticket.created_at = Utc::now()
             .checked_sub_signed(TimeDelta::minutes(16))
             .unwrap();
 
         let err = VerifyAccountRequest::try_from_body(
             verify_account_body,
             account.clone(),
-            Some(verification_request),
+            Some(verification_ticket),
         )
         .unwrap_err();
 
-        if let VerifyAccountRequestError::InvalidVerificationCode = err {
+        if let VerifyAccountRequestError::InvalidVerificationSecret = err {
         } else {
-            panic!("Invalid error, expected `InvalidVerificationCode` variant, got {err}");
+            panic!("Invalid error, expected `InvalidVerificationSecret` variant, got {err}");
         }
     }
 
     #[test]
     fn test_verify_account_request_from_body_with_invalid_plaintext_must_fail() {
-        let (account, verification_request, mut verify_account_body) = setup();
+        let (account, verification_ticket, mut verify_account_body) = setup();
 
         let (other_plaintext, _) =
-            VerificationCodeStrategy::generate_verification_code(&account.email).unwrap();
-        verify_account_body.code = other_plaintext;
+            VerificationSecretStrategy::generate_verification_secret(&account.email).unwrap();
+        verify_account_body.secret = other_plaintext;
 
         let err = VerifyAccountRequest::try_from_body(
             verify_account_body,
             account.clone(),
-            Some(verification_request),
+            Some(verification_ticket),
         )
         .unwrap_err();
 
-        if let VerifyAccountRequestError::InvalidVerificationCode = err {
+        if let VerifyAccountRequestError::InvalidVerificationSecret = err {
         } else {
-            panic!("Invalid error, expected `InvalidVerificationCode` variant, got {err}");
+            panic!("Invalid error, expected `InvalidVerificationSecret` variant, got {err}");
         }
     }
 }

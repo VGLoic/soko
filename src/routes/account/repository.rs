@@ -1,5 +1,5 @@
 use super::domain::{
-    Account, AccountQueryError, SignupError, SignupRequest, VerificationCodeRequest,
+    Account, AccountQueryError, AccountVerificationTicket, SignupError, SignupRequest,
     VerifyAccountError,
 };
 use anyhow::anyhow;
@@ -18,7 +18,7 @@ pub trait AccountRepository: Send + Sync {
     /// * `AccountQueryError::AccountNotFound` - account not found
     async fn get_account_by_email(&self, email: &str) -> Result<Account, AccountQueryError>;
 
-    /// Get an account by email with active verification request
+    /// Get an account by email with active verification ticket
     ///
     /// # Arguments
     /// * `email` - Email of the account
@@ -26,17 +26,17 @@ pub trait AccountRepository: Send + Sync {
     /// # Errors
     /// * `AccountQueryError::Unknown` - unknown error
     /// * `AccountQueryError::AccountNotFound` - account not found
-    async fn get_account_by_email_with_verification_request(
+    async fn get_account_by_email_with_verification_ticket(
         &self,
         email: &str,
-    ) -> Result<(Account, Option<VerificationCodeRequest>), AccountQueryError>;
+    ) -> Result<(Account, Option<AccountVerificationTicket>), AccountQueryError>;
 
-    /// Create an account and creates an active verification request
+    /// Create an account and creates an active verification ticket
     ///
     /// # Arguments
     /// * `email` - Email of the account,
     /// * `password_hash` - Hash of the password,
-    /// * `verification_cyphertext` - Cyphertext of the verification request
+    /// * `verification_cyphertext` - Cyphertext of the verification ticket
     ///
     /// # Errors
     /// * `SignupError::Unknown` - unknown error
@@ -44,12 +44,12 @@ pub trait AccountRepository: Send + Sync {
 
     /// Reset an account creation:
     /// - update the password hash,
-    /// - cancel last active verification request,
-    /// - creates a new active verification request
+    /// - cancel last active verification ticket,
+    /// - creates a new active verification ticket
     ///
     /// # Arguments
     /// * `password_hash` - Hash of the new password,
-    /// * `verification_cyphertext` - Cyphertext of the verification request
+    /// * `verification_cyphertext` - Cyphertext of the verification ticket
     ///
     /// # Errors
     /// * `SignupError::Unknown` - unknown error
@@ -59,8 +59,8 @@ pub trait AccountRepository: Send + Sync {
     ) -> Result<Account, SignupError>;
 
     /// Verify an account:
-    /// - update the `email_verified` to true,
-    /// - confirm the verification request
+    /// - update the `verified` to true,
+    /// - confirm the verification ticket
     ///
     /// # Arguments
     /// * `account_id` - ID of the account,
@@ -89,7 +89,7 @@ impl AccountRepository for PostgresAccountRepository {
                     id,
                     email,
                     password_hash,
-                    email_verified,
+                    verified,
                     created_at,
                     updated_at
                 FROM "account"
@@ -114,12 +114,12 @@ impl AccountRepository for PostgresAccountRepository {
         }
     }
 
-    async fn get_account_by_email_with_verification_request(
+    async fn get_account_by_email_with_verification_ticket(
         &self,
         email: &str,
-    ) -> Result<(Account, Option<VerificationCodeRequest>), AccountQueryError> {
+    ) -> Result<(Account, Option<AccountVerificationTicket>), AccountQueryError> {
         let account = self.get_account_by_email(email).await?;
-        let verification_request = match sqlx::query_as::<_, VerificationCodeRequest>(
+        let verification_ticket = match sqlx::query_as::<_, AccountVerificationTicket>(
             r#"
                 SELECT
                     id,
@@ -128,7 +128,7 @@ impl AccountRepository for PostgresAccountRepository {
                     status,
                     created_at,
                     updated_at
-                FROM "verification_code_request"
+                FROM "account_verification_ticket"
                 WHERE "account_id" = $1 AND "status" = 'active'
             "#,
         )
@@ -143,7 +143,7 @@ impl AccountRepository for PostgresAccountRepository {
                 } else {
                     return Err(anyhow!(e)
                         .context(format!(
-                            "failed query for active verification request with account ID: {}",
+                            "failed query for active verification ticket with account ID: {}",
                             account.id
                         ))
                         .into());
@@ -151,7 +151,7 @@ impl AccountRepository for PostgresAccountRepository {
             }
         };
 
-        Ok((account, verification_request))
+        Ok((account, verification_ticket))
     }
 
     async fn create_account(&self, req: &SignupRequest) -> Result<Account, SignupError> {
@@ -173,7 +173,7 @@ impl AccountRepository for PostgresAccountRepository {
                     id,
                     email,
                     password_hash,
-                    email_verified,
+                    verified,
                     created_at,
                     updated_at
             "#,
@@ -191,7 +191,7 @@ impl AccountRepository for PostgresAccountRepository {
 
         sqlx::query(
             r#"
-        INSERT INTO "verification_code_request" (
+        INSERT INTO "account_verification_ticket" (
             "account_id",
             "cyphertext"
         ) VALUES (
@@ -206,7 +206,7 @@ impl AccountRepository for PostgresAccountRepository {
         .await
         .map_err(|e| {
             anyhow!(e).context(format!(
-                "failed to insert active verification request for created account with email: {}",
+                "failed to insert active verification ticket for created account with email: {}",
                 req.email
             ))
         })?;
@@ -235,7 +235,7 @@ impl AccountRepository for PostgresAccountRepository {
                 id,
                 email,
                 password_hash,
-                email_verified,
+                verified,
                 created_at,
                 updated_at
         "#,
@@ -253,7 +253,7 @@ impl AccountRepository for PostgresAccountRepository {
 
         sqlx::query(
             r#"
-            UPDATE "verification_code_request"
+            UPDATE "account_verification_ticket"
             SET "status" = 'cancelled'
             WHERE "account_id" = $1 AND "status" = 'active';
             "#,
@@ -263,14 +263,14 @@ impl AccountRepository for PostgresAccountRepository {
         .await
         .map_err(|e| {
             anyhow!(e).context(format!(
-                "failed to cancel previous active verification request for account ID: {}",
+                "failed to cancel previous active verification ticket for account ID: {}",
                 account.id
             ))
         })?;
 
         sqlx::query(
             r#"
-            INSERT INTO "verification_code_request" (
+            INSERT INTO "account_verification_ticket" (
                 "account_id",
                 "cyphertext"
             ) VALUES (
@@ -285,7 +285,7 @@ impl AccountRepository for PostgresAccountRepository {
         .await
         .map_err(|e| {
             anyhow!(e).context(format!(
-                "failed to create new active verification request for ID: {}",
+                "failed to create new active verification ticket for ID: {}",
                 account.id
             ))
         })?;
@@ -308,13 +308,13 @@ impl AccountRepository for PostgresAccountRepository {
         let account = sqlx::query_as::<_, Account>(
             r#"
             UPDATE "account"
-            SET "email_verified" = TRUE
+            SET "verified" = TRUE
             WHERE "id" = $1
             RETURNING
                 id,
                 email,
                 password_hash,
-                email_verified,
+                verified,
                 created_at,
                 updated_at
         "#,
@@ -328,7 +328,7 @@ impl AccountRepository for PostgresAccountRepository {
 
         sqlx::query(
             r#"
-            UPDATE "verification_code_request"
+            UPDATE "account_verification_ticket"
             SET "status" = 'confirmed'
             WHERE "account_id" = $1 AND "status" = 'active'
         "#,
@@ -338,7 +338,7 @@ impl AccountRepository for PostgresAccountRepository {
         .await
         .map_err(|e| {
             anyhow!(e).context(format!(
-                "failed to confirm verification request for account with ID: {account_id}"
+                "failed to confirm verification ticket for account with ID: {account_id}"
             ))
         })?;
 

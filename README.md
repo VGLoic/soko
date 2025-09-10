@@ -143,7 +143,7 @@ pub struct Account {
     pub id: uuid::Uuid,
     pub email: String,
     pub password_hash: String,
-    pub email_verified: bool,
+    pub verified: bool,
     // This field is automatically set at creation at the database level
     pub created_at: DateTime<Utc>,
     // This field is automatically updated at the database level
@@ -179,7 +179,7 @@ pub struct Account {
         pub fn try_from_body(body: SignupBody) -> Result<Self, SignupRequestError> {
             let password_hash = PasswordStrategy::hash_password(&body.password)?;
             let (verification_plaintext, verification_cyphertext) =
-                VerificationCodeStrategy::generate_verification_code(&body.email)?;
+                VerificationSecretStrategy::generate_verification_secret(&body.email)?;
             Ok(Self {
                 email: body.email,
                 password_hash,
@@ -193,7 +193,7 @@ pub struct Account {
             account: Account,
             body: SignupBody,
         ) -> Result<Self, SignupRequestError> {
-            if account.email_verified {
+            if account.verified {
                 return Err(SignupRequestError::AccountAlreadyVerified {
                     email: account.email,
                 });

@@ -5,6 +5,7 @@ use axum::{
     response::{IntoResponse, Response},
     routing::post,
 };
+use base64::{Engine, prelude::BASE64_URL_SAFE};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use tracing::{error, warn};
@@ -21,7 +22,7 @@ use domain::{
 
 use super::AppState;
 mod password_strategy;
-mod verification_code_strategy;
+mod verification_secret_strategy;
 
 pub fn account_router() -> Router<AppState> {
     Router::new()
@@ -190,8 +191,20 @@ async fn signup_account(
 pub struct VerifyEmailBody {
     #[validate(email(message = "invalid email format"))]
     pub email: String,
-    #[validate(range(min = 1, exclusive_max = 100_000_000))]
-    pub code: u32,
+    #[validate(custom(function = "validate_base64url"))]
+    pub secret: String,
+}
+
+fn validate_base64url(value: &str) -> Result<(), ValidationError> {
+    if value.is_empty() {
+        return Err(ValidationError::new("empty_string"));
+    }
+
+    if BASE64_URL_SAFE.decode(value).is_err() {
+        return Err(ValidationError::new("invalid_base64url"));
+    }
+
+    Ok(())
 }
 
 impl From<VerifyAccountRequestError> for ApiError {
@@ -207,11 +220,12 @@ impl From<VerifyAccountRequestError> for ApiError {
                 );
                 ApiError::BadRequest(errors)
             }
-            VerifyAccountRequestError::InvalidVerificationCode => {
+            VerifyAccountRequestError::InvalidVerificationSecret => {
                 let mut errors = ValidationErrors::new();
                 errors.add(
-                    "code",
-                    ValidationError::new("code-validity").with_message("Code is invalid".into()),
+                    "secret",
+                    ValidationError::new("secret-validity")
+                        .with_message("Secret is invalid".into()),
                 );
                 ApiError::BadRequest(errors)
             }
@@ -231,13 +245,13 @@ async fn verify_email(
     State(app_state): State<AppState>,
     ValidatedJson(body): ValidatedJson<VerifyEmailBody>,
 ) -> Result<(StatusCode, Json<AccountResponse>), ApiError> {
-    let (existing_account, verification_request) = app_state
+    let (existing_account, verification_ticket) = app_state
         .account_repository
-        .get_account_by_email_with_verification_request(&body.email)
+        .get_account_by_email_with_verification_ticket(&body.email)
         .await?;
 
     let verify_account_request =
-        VerifyAccountRequest::try_from_body(body, existing_account, verification_request)?;
+        VerifyAccountRequest::try_from_body(body, existing_account, verification_ticket)?;
 
     let updated_account = app_state
         .account_repository
