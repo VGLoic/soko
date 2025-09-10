@@ -60,6 +60,8 @@ pub enum AccountQueryError {
 // ################## SIGN UP ##################
 // #############################################
 
+/// DTO of the signup action
+/// It carries the needed informations in order to perform the signup action.
 #[derive(Debug)]
 pub struct SignupRequest {
     pub email: String,
@@ -68,6 +70,7 @@ pub struct SignupRequest {
     pub verification_cyphertext: String,
 }
 
+/// Errors in the construction of the [SignupRequest]
 #[derive(Error, Debug)]
 pub enum SignupRequestError {
     #[error("A verified account already exist for the email: {email}")]
@@ -77,18 +80,7 @@ pub enum SignupRequestError {
 }
 
 impl SignupRequest {
-    pub fn try_from_body_existing_account(
-        account: Account,
-        body: SignupBody,
-    ) -> Result<Self, SignupRequestError> {
-        if account.email_verified {
-            return Err(SignupRequestError::AccountAlreadyVerified {
-                email: account.email,
-            });
-        }
-        Self::try_from_body(body)
-    }
-
+    /// Build a [SignupRequest] using a [SignupBody] HTTP body
     pub fn try_from_body(body: SignupBody) -> Result<Self, SignupRequestError> {
         let password_hash = PasswordStrategy::hash_password(&body.password)?;
         let (verification_plaintext, verification_cyphertext) =
@@ -100,8 +92,22 @@ impl SignupRequest {
             verification_cyphertext,
         })
     }
+
+    /// Build a [SignupRequest] using a [SignupBody] HTTP body and a previously signed up account
+    pub fn try_from_body_with_existing_account(
+        account: Account,
+        body: SignupBody,
+    ) -> Result<Self, SignupRequestError> {
+        if account.email_verified {
+            return Err(SignupRequestError::AccountAlreadyVerified {
+                email: account.email,
+            });
+        }
+        Self::try_from_body(body)
+    }
 }
 
+/// Errors in the interactions with adapters, e.g. database repository
 #[derive(Error, Debug)]
 pub enum SignupError {
     #[error(transparent)]
@@ -168,7 +174,8 @@ mod signup_tests {
             password: password.clone(),
         };
         let request =
-            SignupRequest::try_from_body_existing_account(account, signup_body.clone()).unwrap();
+            SignupRequest::try_from_body_with_existing_account(account, signup_body.clone())
+                .unwrap();
         assert_eq!(request.email, email);
         assert!(
             VerificationCodeStrategy::verify_verification_code(
@@ -192,7 +199,7 @@ mod signup_tests {
             password: password.clone(),
         };
 
-        let err = SignupRequest::try_from_body_existing_account(account, signup_body.clone())
+        let err = SignupRequest::try_from_body_with_existing_account(account, signup_body.clone())
             .unwrap_err();
         if let SignupRequestError::AccountAlreadyVerified { email: _email } = err {
         } else {

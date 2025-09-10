@@ -96,19 +96,6 @@ impl From<SignupError> for ApiError {
     }
 }
 
-#[derive(Debug, Clone, Validate, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SignupBody {
-    #[validate(email(message = "invalid email format"))]
-    pub email: String,
-    #[validate(length(
-        min = 10,
-        max = 40,
-        message = "password must contain between 10 and 40 characters"
-    ))]
-    pub password: String,
-}
-
 impl From<SignupRequestError> for ApiError {
     fn from(value: SignupRequestError) -> ApiError {
         match value {
@@ -124,6 +111,19 @@ impl From<SignupRequestError> for ApiError {
             }
         }
     }
+}
+
+#[derive(Debug, Clone, Validate, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SignupBody {
+    #[validate(email(message = "invalid email format"))]
+    pub email: String,
+    #[validate(length(
+        min = 10,
+        max = 40,
+        message = "password must contain between 10 and 40 characters"
+    ))]
+    pub password: String,
 }
 
 async fn signup_account(
@@ -149,7 +149,8 @@ async fn signup_account(
     };
 
     if let Some(existing_account) = existing_account_opt {
-        signup_request = SignupRequest::try_from_body_existing_account(existing_account, body)?;
+        signup_request =
+            SignupRequest::try_from_body_with_existing_account(existing_account, body)?;
 
         signed_up_account = app_state
             .account_repository

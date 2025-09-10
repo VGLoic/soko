@@ -39,7 +39,7 @@ pub trait AccountRepository: Send + Sync {
     /// * `verification_cyphertext` - Cyphertext of the verification request
     ///
     /// # Errors
-    /// * `Unclassified` - fallback error type
+    /// * `SignupError::Unknown` - unknown error
     async fn create_account(&self, signup_request: &SignupRequest) -> Result<Account, SignupError>;
 
     /// Reset an account creation:
@@ -52,7 +52,7 @@ pub trait AccountRepository: Send + Sync {
     /// * `verification_cyphertext` - Cyphertext of the verification request
     ///
     /// # Errors
-    /// * `Unclassified` - fallback error type
+    /// * `SignupError::Unknown` - unknown error
     async fn reset_account_creation(
         &self,
         signup_request: &SignupRequest,
@@ -66,7 +66,7 @@ pub trait AccountRepository: Send + Sync {
     /// * `account_id` - ID of the account,
     ///
     /// # Errors
-    /// * `Unclassified` - fallback error type
+    /// * `VerifyAccountError::Unknown` - unknown error
     async fn verify_account(&self, account_id: uuid::Uuid) -> Result<Account, VerifyAccountError>;
 }
 
