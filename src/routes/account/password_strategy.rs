@@ -34,7 +34,7 @@ impl PasswordStrategy {
     ///
     /// # Arguments
     /// * `password` - Password to hash
-    /// * `password_hash` - Argpon2id formatted key
+    /// * `password_hash` - Argon2id formatted key
     pub fn verify_password(password: &str, password_hash: &str) -> Result<(), anyhow::Error> {
         let password_hash = PasswordHash::new(password_hash).map_err(|e| {
             anyhow!(e).context("failed to build PasswordHash struct from raw string")
