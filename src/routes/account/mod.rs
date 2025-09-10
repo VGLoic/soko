@@ -170,9 +170,13 @@ async fn signup_account(
             &signup_request.email,
             signup_request.verification_plaintext.to_string().as_str(),
         )
-        .await {
-            error!("failed to send email to email \"{}\" with error {e}", &signup_request.email);
-        }
+        .await
+    {
+        error!(
+            "failed to send email to email \"{}\" with error {e}",
+            &signup_request.email
+        );
+    }
 
     Ok((StatusCode::CREATED, Json(signed_up_account.into())))
 }
