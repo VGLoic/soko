@@ -233,6 +233,9 @@ pub trait AccountRepository: Send + Sync {
     ) -> Result<(StatusCode, Json<AccountResponse>), ApiError> {
         ...
     ```
+- each route handler must define a body with its parsing rules. It is encouraged to use strong common types such as `Email`. It is acceptable to:
+    - use the `validator` crate in order to add validation to fields,
+    - parse specific field in the domain request constructor.
 - the domain API errors must be defined as an enum that implements the `IntoResponse` trait of `axum`
     ```rust
     #[derive(Debug)]
