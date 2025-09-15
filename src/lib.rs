@@ -4,6 +4,7 @@ use std::{
 };
 use tracing::Level;
 
+pub mod newtypes;
 pub mod routes;
 pub mod third_party;
 

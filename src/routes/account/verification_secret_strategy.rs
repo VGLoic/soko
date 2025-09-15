@@ -1,3 +1,4 @@
+use crate::newtypes;
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier, password_hash::Salt};
 use base64::prelude::*;
 use hmac::{Hmac, Mac};
@@ -22,7 +23,9 @@ impl VerificationSecretStrategy {
     ///
     /// # Arguments
     /// * `email` - email to link the verification secret to
-    pub fn generate_verification_secret(email: &str) -> Result<(String, String), anyhow::Error> {
+    pub fn generate_verification_secret(
+        email: &newtypes::Email,
+    ) -> Result<(String, String), anyhow::Error> {
         let mut rng = ChaCha20Rng::from_os_rng();
 
         let mut salt = [0u8; 16];
@@ -41,7 +44,7 @@ impl VerificationSecretStrategy {
             .ok_or(anyhow::anyhow!("Unable to extract hash from key"))?;
 
         let mut hmac: Hmac<Sha3_256> = Hmac::new_from_slice(key_hash.as_bytes())?;
-        hmac.update(email.as_bytes());
+        hmac.update(email.as_str().as_bytes());
         let mac = hmac.finalize().into_bytes();
 
         // Mac is 32 bytes
@@ -67,7 +70,7 @@ impl VerificationSecretStrategy {
     /// * `cyphertext` - the compactified elements of the encryption of the secret, previously generated
     pub fn verify_verification_secret(
         secret: &str,
-        email: &str,
+        email: &newtypes::Email,
         cyphertext: &str,
     ) -> Result<bool, anyhow::Error> {
         let secret_bytes = BASE64_URL_SAFE.decode(secret)?;
@@ -93,7 +96,7 @@ impl VerificationSecretStrategy {
                 .ok_or(anyhow::anyhow!("Unable to extract hash from key"))?
                 .as_bytes(),
         )?;
-        hmac.update(email.as_bytes());
+        hmac.update(email.as_str().as_bytes());
 
         Ok(hmac.verify_slice(mac).is_ok())
     }
@@ -101,13 +104,13 @@ impl VerificationSecretStrategy {
 
 #[cfg(test)]
 mod tests {
-    use fake::{Fake, faker};
+    use fake::{Fake, Faker};
 
     use super::*;
 
     #[test]
     fn test_verification_secret_encryption() {
-        let email: String = faker::internet::en::SafeEmail().fake();
+        let email: newtypes::Email = Faker.fake();
         let (secret, cyphertext) =
             VerificationSecretStrategy::generate_verification_secret(&email).unwrap();
         assert!(

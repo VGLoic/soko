@@ -78,7 +78,7 @@ pub struct AccountResponse {
 impl From<domain::Account> for AccountResponse {
     fn from(value: domain::Account) -> Self {
         AccountResponse {
-            email: value.email,
+            email: value.email.to_string(),
             created_at: value.created_at,
             updated_at: value.updated_at,
         }
@@ -110,6 +110,7 @@ impl From<SignupRequestError> for ApiError {
                 );
                 ApiError::BadRequest(errors)
             }
+            SignupRequestError::InvalidBody(errors) => ApiError::BadRequest(errors),
         }
     }
 }
@@ -260,6 +261,30 @@ async fn verify_email(
 
     Ok((StatusCode::OK, Json(updated_account.into())))
 }
+
+// ##################################################
+// ################## ACCESS TOKEN ##################
+// ##################################################
+
+#[derive(Debug, Clone, Validate, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateAccessTokenBody {
+    #[validate(email(message = "invalid email format"))]
+    pub email: String,
+    #[validate(length(
+        min = 10,
+        max = 40,
+        message = "password must contain between 10 and 40 characters"
+    ))]
+    pub password: String,
+    #[validate(length(min = 1, max = 40, message = "name must be at most 40 characters"))]
+    pub name: String,
+    pub lifetime: u32,
+}
+
+// ###########################################
+// ################## UTILS ##################
+// ###########################################
 
 struct ValidatedJson<T>(T);
 

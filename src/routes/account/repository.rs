@@ -240,7 +240,7 @@ impl AccountRepository for PostgresAccountRepository {
                 updated_at
         "#,
         )
-        .bind(&req.email)
+        .bind(req.email.as_str())
         .bind(&req.password_hash)
         .fetch_one(&mut *transaction)
         .await

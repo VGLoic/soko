@@ -2,6 +2,9 @@ use chrono::{DateTime, TimeDelta, Utc};
 use sqlx::{prelude::FromRow, types::uuid};
 use thiserror::Error;
 use tracing::warn;
+use validator::{ValidationError, ValidationErrors};
+
+use crate::newtypes::{Email, EmailError};
 
 use super::{
     SignupBody, VerifyEmailBody, password_strategy::PasswordStrategy,
@@ -11,7 +14,7 @@ use super::{
 #[derive(FromRow, Clone, Debug)]
 pub struct Account {
     pub id: uuid::Uuid,
-    pub email: String,
+    pub email: Email,
     pub password_hash: String,
     pub verified: bool,
     // This field is automatically set at creation at the database level
@@ -64,7 +67,7 @@ pub enum AccountQueryError {
 /// It carries the needed informations in order to perform the signup action.
 #[derive(Debug)]
 pub struct SignupRequest {
-    pub email: String,
+    pub email: Email,
     pub password_hash: String,
     pub verification_plaintext: String,
     pub verification_cyphertext: String,
@@ -73,20 +76,38 @@ pub struct SignupRequest {
 /// Errors in the construction of the [SignupRequest]
 #[derive(Error, Debug)]
 pub enum SignupRequestError {
+    #[error("Invalid body, got errors: {0}")]
+    InvalidBody(ValidationErrors),
     #[error("A verified account already exist for the email: {email}")]
-    AccountAlreadyVerified { email: String },
+    AccountAlreadyVerified { email: Email },
     #[error(transparent)]
     Unknown(#[from] anyhow::Error),
+}
+
+impl From<EmailError> for SignupRequestError {
+    fn from(value: EmailError) -> Self {
+        let mut validation_errors = ValidationErrors::new();
+        let error =
+            match value {
+                EmailError::Empty => ValidationError::new("invalid-email")
+                    .with_message("empty is not allowed".into()),
+                EmailError::InvalidFormat => ValidationError::new("invalid-email")
+                    .with_message("invalid email format".into()),
+            };
+        validation_errors.add("email", error);
+        SignupRequestError::InvalidBody(validation_errors)
+    }
 }
 
 impl SignupRequest {
     /// Build a [SignupRequest] using a [SignupBody] HTTP body
     pub fn try_from_body(body: SignupBody) -> Result<Self, SignupRequestError> {
+        let email = Email::new(&body.email)?;
         let password_hash = PasswordStrategy::hash_password(&body.password)?;
         let (verification_plaintext, verification_cyphertext) =
-            VerificationSecretStrategy::generate_verification_secret(&body.email)?;
+            VerificationSecretStrategy::generate_verification_secret(&email)?;
         Ok(Self {
-            email: body.email,
+            email,
             password_hash,
             verification_plaintext,
             verification_cyphertext,
@@ -131,7 +152,7 @@ mod signup_tests {
             .fake_with_rng(rng);
             Account {
                 id: uuid::Uuid::new_v4(),
-                email: faker::internet::en::SafeEmail().fake_with_rng(rng),
+                email: Faker.fake_with_rng(rng),
                 password_hash: "$2y$10$EZGQ6TDVUAicnOu4LgVoI.kFmcbFkT9nlOXeLfnKZtJYF8YjMM3mG"
                     .to_string(),
                 verified: true,
@@ -144,10 +165,10 @@ mod signup_tests {
 
     #[test]
     fn test_signup_request_from_body() {
-        let email: String = faker::internet::en::SafeEmail().fake();
+        let email: Email = Faker.fake();
         let password: String = faker::internet::en::Password(10..40).fake();
         let signup_body = SignupBody {
-            email: email.clone(),
+            email: email.to_string(),
             password: password.clone(),
         };
         let request = SignupRequest::try_from_body(signup_body.clone()).unwrap();
@@ -167,10 +188,10 @@ mod signup_tests {
     fn test_signup_request_from_body_and_account() {
         let mut account: Account = Faker.fake();
         account.verified = false;
-        let email: String = faker::internet::en::SafeEmail().fake();
+        let email: Email = Faker.fake();
         let password: String = faker::internet::en::Password(10..40).fake();
         let signup_body = SignupBody {
-            email: email.clone(),
+            email: email.to_string(),
             password: password.clone(),
         };
         let request =
@@ -192,10 +213,10 @@ mod signup_tests {
     fn test_signup_request_from_body_and_verified_account_must_fail() {
         let mut account: Account = Faker.fake();
         account.verified = true;
-        let email: String = faker::internet::en::SafeEmail().fake();
+        let email: Email = Faker.fake();
         let password: String = faker::internet::en::Password(10..40).fake();
         let signup_body = SignupBody {
-            email: email.clone(),
+            email: email.to_string(),
             password: password.clone(),
         };
 
@@ -285,7 +306,8 @@ mod verify_account_tests {
             )
             .fake_with_rng(rng);
             let (_, cyphertext) =
-                VerificationSecretStrategy::generate_verification_secret("abc@def.com").unwrap();
+                VerificationSecretStrategy::generate_verification_secret(&Faker.fake::<Email>())
+                    .unwrap();
             AccountVerificationTicket {
                 id: uuid::Uuid::new_v4(),
                 account_id: uuid::Uuid::new_v4(),
