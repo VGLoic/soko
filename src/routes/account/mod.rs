@@ -14,14 +14,16 @@ pub mod domain;
 mod repository;
 pub use repository::{AccountRepository, PostgresAccountRepository};
 
-use crate::newtypes::{Email, Password};
+use crate::newtypes::Email;
 use domain::{
     Account, AccountQueryError, SignupError, SignupRequest, SignupRequestError, VerifyAccountError,
     VerifyAccountRequest, VerifyAccountRequestError,
 };
 
 use super::AppState;
+mod newtypes;
 mod verification_secret_strategy;
+use newtypes::Password;
 
 pub fn account_router() -> Router<AppState> {
     Router::new()
