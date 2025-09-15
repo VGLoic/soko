@@ -71,7 +71,7 @@ impl From<AccountQueryError> for ApiError {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AccountResponse {
-    pub email: String,
+    pub email: Email,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -79,7 +79,7 @@ pub struct AccountResponse {
 impl From<domain::Account> for AccountResponse {
     fn from(value: domain::Account) -> Self {
         AccountResponse {
-            email: value.email.to_string(),
+            email: value.email,
             created_at: value.created_at,
             updated_at: value.updated_at,
         }

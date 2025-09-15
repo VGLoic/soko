@@ -141,7 +141,7 @@ Implementation of a domain must follow a set of rules:
 #[derive(FromRow)]
 pub struct Account {
     pub id: uuid::Uuid,
-    pub email: String,
+    pub email: Email,
     pub password_hash: String,
     pub verified: bool,
     // This field is automatically set at creation at the database level
@@ -159,7 +159,7 @@ pub struct Account {
     /// It carries the needed informations in order to perform the signup action.
     #[derive(Debug)]
     pub struct SignupRequest {
-        pub email: String,
+        pub email: Email,
         pub password_hash: String,
         pub verification_plaintext: u32,
         pub verification_cyphertext: String,
@@ -177,7 +177,7 @@ pub struct Account {
     impl SignupRequest {
         /// Build a [SignupRequest] using a [SignupBody] HTTP body
         pub fn try_from_body(body: SignupBody) -> Result<Self, SignupRequestError> {
-            let password_hash = PasswordStrategy::hash_password(&body.password)?;
+            let password_hash = password.hash(&body.password)?;
             let (verification_plaintext, verification_cyphertext) =
                 VerificationSecretStrategy::generate_verification_secret(&body.email)?;
             Ok(Self {
@@ -287,7 +287,7 @@ pub trait AccountRepository: Send + Sync {
     #[derive(Debug, Serialize, Deserialize)]
     #[serde(rename_all = "camelCase")]
     pub struct AccountResponse {
-        pub email: String,
+        pub email: Email,
         pub created_at: DateTime<Utc>,
         pub updated_at: DateTime<Utc>,
     }

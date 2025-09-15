@@ -45,8 +45,13 @@ async fn test_account_signup() {
         .unwrap();
     assert_eq!(response.status(), StatusCode::CREATED);
     assert_eq!(
-        response.json::<AccountResponse>().await.unwrap().email,
-        signup_body.email
+        response
+            .json::<AccountResponse>()
+            .await
+            .unwrap()
+            .email
+            .as_str(),
+        signup_body.email.to_lowercase()
     );
 }
 
