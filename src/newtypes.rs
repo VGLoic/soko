@@ -18,6 +18,25 @@ pub enum EmailError {
     InvalidFormat,
 }
 impl Email {
+    /// Creates a new `Email` instance after validating the input string.
+    ///
+    /// # Arguments
+    ///
+    /// * `v` - A string slice that holds the email address to be validated and stored.
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(Self)` if the input is a non-empty, valid email address (case-insensitive, stored in lowercase).
+    /// * `Err(EmailError::Empty)` if the input is empty or only whitespace.
+    /// * `Err(EmailError::InvalidFormat)` if the input does not match a valid email format.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use your_crate::Email;
+    /// let email = Email::new("user@example.com");
+    /// assert!(email.is_ok());
+    /// ```
     pub fn new(v: &str) -> Result<Self, EmailError> {
         let trimmed = v.trim();
         if trimmed.is_empty() {
@@ -29,6 +48,23 @@ impl Email {
         Ok(Self(trimmed.to_lowercase()))
     }
 
+    /// Creates a new `Email` instance without validating the input string.
+    ///
+    /// # Arguments
+    ///
+    /// * `v` - A string slice that holds the email address to be stored.
+    ///
+    /// # Safety
+    ///
+    /// This method does not perform any validation on the input. It is the caller's responsibility
+    /// to ensure that the provided string is a valid email address.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use your_crate::Email;
+    /// let email = Email::new_unchecked("user@example.com");
+    /// ```
     pub fn new_unchecked(v: &str) -> Self {
         Self(v.to_owned())
     }
