@@ -15,7 +15,7 @@ pub mod domain;
 mod repository;
 pub use repository::{AccountRepository, PostgresAccountRepository};
 
-use crate::newtypes::{Email, PasswordInput};
+use crate::newtypes::{Email, Password};
 use domain::{
     Account, AccountQueryError, SignupError, SignupRequest, SignupRequestError, VerifyAccountError,
     VerifyAccountRequest, VerifyAccountRequestError,
@@ -89,11 +89,11 @@ impl From<domain::Account> for AccountResponse {
 // ################## SIGN UP ###################
 // ##############################################
 
-#[derive(Debug, Clone, Validate, Serialize, Deserialize)]
+#[derive(Debug, Clone, Validate, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SignupBody {
     pub email: Email,
-    pub password: PasswordInput,
+    pub password: Password,
 }
 
 async fn signup_account(

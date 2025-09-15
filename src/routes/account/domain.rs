@@ -4,7 +4,7 @@ use thiserror::Error;
 use tracing::warn;
 use validator::{ValidationError, ValidationErrors};
 
-use crate::newtypes::{Email, EmailError, Password, PasswordError};
+use crate::newtypes::{Email, EmailError, PasswordError};
 
 use super::{
     SignupBody, VerifyEmailBody, verification_secret_strategy::VerificationSecretStrategy,
@@ -117,7 +117,7 @@ impl From<PasswordError> for SignupRequestError {
 impl SignupRequest {
     /// Build a [SignupRequest] using a [SignupBody] HTTP body
     pub fn try_from_body(body: SignupBody) -> Result<Self, SignupRequestError> {
-        let password_hash = Password::new(body.password)?.hash()?;
+        let password_hash = body.password.hash()?;
         let (verification_plaintext, verification_cyphertext) =
             VerificationSecretStrategy::generate_verification_secret(&body.email)?;
         Ok(Self {
@@ -180,7 +180,7 @@ mod signup_tests {
     #[test]
     fn test_signup_request_from_body() {
         let signup_body = SignupBody {
-            email: faker::internet::en::SafeEmail().fake(),
+            email: Faker.fake(),
             password: Faker.fake(),
         };
         let request = SignupRequest::try_from_body(signup_body.clone()).unwrap();
@@ -193,12 +193,7 @@ mod signup_tests {
             )
             .is_ok()
         );
-        assert!(
-            Password::new(signup_body.password)
-                .unwrap()
-                .verify(&request.password_hash)
-                .is_ok()
-        );
+        assert!(signup_body.password.verify(&request.password_hash).is_ok());
     }
 
     #[test]
@@ -221,12 +216,7 @@ mod signup_tests {
             )
             .is_ok()
         );
-        assert!(
-            Password::new(signup_body.password)
-                .unwrap()
-                .verify(&request.password_hash)
-                .is_ok()
-        );
+        assert!(signup_body.password.verify(&request.password_hash).is_ok());
     }
 
     #[test]

@@ -1,4 +1,4 @@
-use std::{fmt::Debug, ops::Deref};
+use std::fmt::Debug;
 
 use anyhow::anyhow;
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier, password_hash::Salt};
@@ -10,49 +10,11 @@ use serde::{Deserialize, Serialize, de::Visitor};
 use sqlx::{Database, Decode, Encode};
 use validator::ValidateEmail;
 
-// ########################################################
-// #################### PASSWORD INPUT ####################
-// ########################################################
-
-/// This type is meant to be used in payload structures for IO.
-/// One needs to map it to [Password] for actual validation or use.
-#[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(transparent)]
-pub struct PasswordInput(String);
-
-impl<T> Dummy<T> for PasswordInput {
-    fn dummy_with_rng<R: rand::Rng + ?Sized>(_: &T, rng: &mut R) -> Self {
-        let mut password: String = faker::internet::en::Password(10..36).fake_with_rng(rng);
-        password += "{&";
-        password += "24";
-        PasswordInput(password)
-    }
-}
-
-impl Deref for PasswordInput {
-    type Target = str;
-
-    fn deref(&self) -> &Self::Target {
-        self.0.as_str()
-    }
-}
-
-impl std::fmt::Display for PasswordInput {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "******")
-    }
-}
-
-impl Debug for PasswordInput {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "*****")
-    }
-}
-
 // ##################################################
 // #################### PASSWORD ####################
 // ##################################################
 
+/// This type is meant to be used internally and in incoming IO requests (body payloads)
 #[derive(Clone, PartialEq, Eq)]
 pub struct Password(String);
 
@@ -90,7 +52,7 @@ impl Password {
     /// let password = Password::new("AA11!!bbcc");
     /// assert!(password.is_ok());
     /// ```
-    pub fn new(v: PasswordInput) -> Result<Self, PasswordError> {
+    pub fn new(v: &str) -> Result<Self, PasswordError> {
         if v.is_empty() {
             return Err(PasswordError::Empty);
         }
@@ -184,11 +146,56 @@ impl Debug for Password {
     }
 }
 
+impl<T> Dummy<T> for Password {
+    fn dummy_with_rng<R: rand::Rng + ?Sized>(_: &T, rng: &mut R) -> Self {
+        let mut password: String = faker::internet::en::Password(10..36).fake_with_rng(rng);
+        password += "{&";
+        password += "24";
+        Password(password)
+    }
+}
+
+struct PasswordVisitor;
+
+impl<'de> Visitor<'de> for PasswordVisitor {
+    type Value = Password;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("a valid password of 10 to 40 characters. Must contain at least 2 special characters, 2 digits and 2 capital letters")
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Password::new(v).map_err(|e| match e {
+            PasswordError::Empty => serde::de::Error::custom("password must not be empty"),
+            PasswordError::InvalidPassword(reason) => serde::de::Error::custom(reason),
+        })
+    }
+
+    fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        self.visit_str(v.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for Password {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_string(PasswordVisitor)
+    }
+}
+
 // ###############################################
 // #################### EMAIL ####################
 // ###############################################
 
-/// This type is meant to be used internally and in IO (body payloads)
+/// This type is meant to be used internally and in IO body payloads
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Email(String);
 
