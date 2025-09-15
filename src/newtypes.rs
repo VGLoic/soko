@@ -33,7 +33,7 @@ impl Email {
     /// # Examples
     ///
     /// ```
-    /// # use your_crate::Email;
+    /// # use soko::newtypes::Email;
     /// let email = Email::new("user@example.com");
     /// assert!(email.is_ok());
     /// ```
@@ -62,7 +62,7 @@ impl Email {
     /// # Examples
     ///
     /// ```
-    /// # use your_crate::Email;
+    /// # use soko::newtypes::Email;
     /// let email = Email::new_unchecked("user@example.com");
     /// ```
     pub fn new_unchecked(v: &str) -> Self {

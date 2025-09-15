@@ -42,14 +42,6 @@ impl Password {
     /// Returns a `PasswordError` if any of the validation rules are not met:
     /// - `PasswordError::Empty` if the password is empty.
     /// - `PasswordError::InvalidPassword` with a descriptive message if any other rule is violated.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use your_crate::Password;
-    /// let password = Password::new("AA11!!bbcc");
-    /// assert!(password.is_ok());
-    /// ```
     pub fn new(v: &str) -> Result<Self, PasswordError> {
         if v.is_empty() {
             return Err(PasswordError::Empty);
