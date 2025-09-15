@@ -1,5 +1,6 @@
 use std::{collections::HashMap, net::SocketAddr, sync::Arc, time::Duration};
 
+use anyhow::anyhow;
 use async_trait::async_trait;
 use soko::{
     Config,
@@ -83,11 +84,12 @@ impl FakeMailingService {
     }
 
     #[allow(dead_code)]
-    pub fn get_verification_secret(&self, email: &Email) -> Result<Option<String>, anyhow::Error> {
+    pub fn get_verification_secret(&self, email: &str) -> Result<Option<String>, anyhow::Error> {
+        let email = Email::new(email).map_err(|_| anyhow!("failed to map str email to email"))?;
         let secret = self
             .verification_secrets
             .try_read()?
-            .get(email)
+            .get(&email)
             .map(|v| v.to_owned());
         Ok(secret)
     }

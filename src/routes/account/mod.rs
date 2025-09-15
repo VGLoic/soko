@@ -1,6 +1,6 @@
 use axum::{
     Json, Router,
-    extract::{FromRequest, State, rejection::JsonRejection},
+    extract::{FromRequest, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::post,
@@ -15,13 +15,13 @@ pub mod domain;
 mod repository;
 pub use repository::{AccountRepository, PostgresAccountRepository};
 
+use crate::newtypes::{Email, PasswordInput};
 use domain::{
     Account, AccountQueryError, SignupError, SignupRequest, SignupRequestError, VerifyAccountError,
     VerifyAccountRequest, VerifyAccountRequestError,
 };
 
 use super::AppState;
-mod password_strategy;
 mod verification_secret_strategy;
 
 pub fn account_router() -> Router<AppState> {
@@ -89,42 +89,11 @@ impl From<domain::Account> for AccountResponse {
 // ################## SIGN UP ###################
 // ##############################################
 
-impl From<SignupError> for ApiError {
-    fn from(value: SignupError) -> Self {
-        match value {
-            SignupError::Unknown(e) => ApiError::InternalServerError(e),
-        }
-    }
-}
-
-impl From<SignupRequestError> for ApiError {
-    fn from(value: SignupRequestError) -> ApiError {
-        match value {
-            SignupRequestError::Unknown(e) => ApiError::InternalServerError(e),
-            SignupRequestError::AccountAlreadyVerified { email: _email } => {
-                let mut errors = ValidationErrors::new();
-                errors.add(
-                    "email",
-                    ValidationError::new("existing-email")
-                        .with_message("Email is already associated with a verified account".into()),
-                );
-                ApiError::BadRequest(errors)
-            }
-            SignupRequestError::InvalidBody(errors) => ApiError::BadRequest(errors),
-        }
-    }
-}
-
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SignupBody {
-    pub email: String,
-    #[validate(length(
-        min = 10,
-        max = 40,
-        message = "password must contain between 10 and 40 characters"
-    ))]
-    pub password: String,
+    pub email: Email,
+    pub password: PasswordInput,
 }
 
 async fn signup_account(
@@ -169,7 +138,7 @@ async fn signup_account(
         .mailing_service
         .send_email(
             &signup_request.email,
-            signup_request.verification_plaintext.to_string().as_str(),
+            &signup_request.verification_plaintext,
         )
         .await
     {
@@ -182,6 +151,32 @@ async fn signup_account(
     Ok((StatusCode::CREATED, Json(signed_up_account.into())))
 }
 
+impl From<SignupError> for ApiError {
+    fn from(value: SignupError) -> Self {
+        match value {
+            SignupError::Unknown(e) => ApiError::InternalServerError(e),
+        }
+    }
+}
+
+impl From<SignupRequestError> for ApiError {
+    fn from(value: SignupRequestError) -> ApiError {
+        match value {
+            SignupRequestError::Unknown(e) => ApiError::InternalServerError(e),
+            SignupRequestError::AccountAlreadyVerified { email: _email } => {
+                let mut errors = ValidationErrors::new();
+                errors.add(
+                    "email",
+                    ValidationError::new("existing-email")
+                        .with_message("Email is already associated with a verified account".into()),
+                );
+                ApiError::BadRequest(errors)
+            }
+            SignupRequestError::InvalidBody(errors) => ApiError::BadRequest(errors),
+        }
+    }
+}
+
 // ####################################################
 // ################## VERIFY ACCOUNT ##################
 // ####################################################
@@ -189,8 +184,8 @@ async fn signup_account(
 #[derive(Debug, Validate, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct VerifyEmailBody {
-    #[validate(email(message = "invalid email format"))]
-    pub email: String,
+    pub email: Email,
+    // REMIND ME
     #[validate(custom(function = "validate_base64url"))]
     pub secret: String,
 }
@@ -279,14 +274,7 @@ where
             Ok(p) => p,
             Err(e) => {
                 warn!("{e}");
-                return Err(match e {
-                    JsonRejection::JsonDataError(_) => (
-                        StatusCode::BAD_REQUEST,
-                        "Valid JSON body but not the expected JSON data format",
-                    )
-                        .into_response(),
-                    _ => (StatusCode::BAD_REQUEST, "Invalid JSON body").into_response(),
-                });
+                return Err((StatusCode::BAD_REQUEST, e.body_text()).into_response());
             }
         };
         if let Err(e) = payload.validate() {
