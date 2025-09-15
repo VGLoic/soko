@@ -17,6 +17,10 @@ use validator::ValidateEmail;
 //     }
 // }
 
+// ###############################################
+// #################### EMAIL ####################
+// ###############################################
+
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Email(String);
 
