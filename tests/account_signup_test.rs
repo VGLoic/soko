@@ -1,30 +1,57 @@
-use fake::{Fake, faker};
+use fake::{Dummy, Fake, Faker, faker};
 use reqwest::StatusCode;
-use soko::routes::{AccountResponse, SignupBody, VerifyEmailBody};
+use serde::Serialize;
+use soko::routes::AccountResponse;
 
 mod common;
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TestSignupBody {
+    email: String,
+    password: String,
+}
+
+impl<T> Dummy<T> for TestSignupBody {
+    fn dummy_with_rng<R: rand::Rng + ?Sized>(_: &T, rng: &mut R) -> Self {
+        let mut password: String = faker::internet::en::Password(10..36).fake_with_rng(rng);
+        password += "6;9+";
+        TestSignupBody {
+            email: faker::internet::en::SafeEmail().fake_with_rng(rng),
+            password,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TestVerifyAccountBody {
+    email: String,
+    secret: String,
+}
 
 #[tokio::test]
 async fn test_account_signup() {
     let test_state = common::setup().await.unwrap();
 
-    let email: String = faker::internet::en::SafeEmail().fake();
-    let password = faker::internet::en::Password(10..40).fake();
+    let signup_body = Faker.fake::<TestSignupBody>();
 
     let client = reqwest::Client::new();
     let response = client
         .post(format!("{}/accounts/signup", &test_state.server_url))
-        .json(&SignupBody {
-            email: email.clone(),
-            password,
-        })
+        .json(&signup_body)
         .send()
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::CREATED);
     assert_eq!(
-        response.json::<AccountResponse>().await.unwrap().email,
-        email
+        response
+            .json::<AccountResponse>()
+            .await
+            .unwrap()
+            .email
+            .as_str(),
+        signup_body.email.to_lowercase()
     );
 }
 
@@ -32,16 +59,12 @@ async fn test_account_signup() {
 async fn test_account_email_verification() {
     let test_state = common::setup().await.unwrap();
 
-    let email: String = faker::internet::en::SafeEmail().fake();
-    let password = faker::internet::en::Password(10..40).fake();
+    let signup_body = Faker.fake::<TestSignupBody>();
 
     let client = reqwest::Client::new();
     let response = client
         .post(format!("{}/accounts/signup", &test_state.server_url))
-        .json(&SignupBody {
-            email: email.clone(),
-            password,
-        })
+        .json(&signup_body)
         .send()
         .await
         .unwrap();
@@ -49,11 +72,11 @@ async fn test_account_email_verification() {
 
     let response = client
         .post(format!("{}/accounts/verify-email", &test_state.server_url))
-        .json(&VerifyEmailBody {
-            email: email.clone(),
+        .json(&TestVerifyAccountBody {
+            email: signup_body.email.clone(),
             secret: test_state
                 .mailing_service
-                .get_verification_secret(&email)
+                .get_verification_secret(&signup_body.email)
                 .unwrap()
                 .unwrap(),
         })
@@ -67,26 +90,22 @@ async fn test_account_email_verification() {
 async fn test_forbidden_signup_once_verified() {
     let test_state = common::setup().await.unwrap();
 
-    let email: String = faker::internet::en::SafeEmail().fake();
-    let password = faker::internet::en::Password(10..40).fake();
+    let signup_body = Faker.fake::<TestSignupBody>();
 
     let client = reqwest::Client::new();
     client
         .post(format!("{}/accounts/signup", &test_state.server_url))
-        .json(&SignupBody {
-            email: email.clone(),
-            password,
-        })
+        .json(&signup_body)
         .send()
         .await
         .unwrap();
     client
         .post(format!("{}/accounts/verify-email", &test_state.server_url))
-        .json(&VerifyEmailBody {
-            email: email.clone(),
+        .json(&TestVerifyAccountBody {
+            email: signup_body.email.clone(),
             secret: test_state
                 .mailing_service
-                .get_verification_secret(&email)
+                .get_verification_secret(&signup_body.email)
                 .unwrap()
                 .unwrap(),
         })
@@ -97,11 +116,11 @@ async fn test_forbidden_signup_once_verified() {
     assert_eq!(
         client
             .post(format!("{}/accounts/verify-email", &test_state.server_url))
-            .json(&VerifyEmailBody {
-                email: email.clone(),
+            .json(&TestVerifyAccountBody {
+                email: signup_body.email.clone(),
                 secret: test_state
                     .mailing_service
-                    .get_verification_secret(&email)
+                    .get_verification_secret(&signup_body.email)
                     .unwrap()
                     .unwrap(),
             })
@@ -112,13 +131,13 @@ async fn test_forbidden_signup_once_verified() {
         StatusCode::BAD_REQUEST
     );
 
+    let mut another_signup_body = Faker.fake::<TestSignupBody>();
+    another_signup_body.email = signup_body.email;
+
     assert_eq!(
         client
             .post(format!("{}/accounts/signup", &test_state.server_url))
-            .json(&SignupBody {
-                email: email.clone(),
-                password: faker::internet::en::Password(10..40).fake(),
-            })
+            .json(&another_signup_body)
             .send()
             .await
             .unwrap()
@@ -131,29 +150,23 @@ async fn test_forbidden_signup_once_verified() {
 async fn test_account_signup_two_successive_times() {
     let test_state = common::setup().await.unwrap();
 
-    let email: String = faker::internet::en::SafeEmail().fake();
-    let password = faker::internet::en::Password(10..40).fake();
+    let signup_body = Faker.fake::<TestSignupBody>();
 
     let client = reqwest::Client::new();
     let response = client
         .post(format!("{}/accounts/signup", &test_state.server_url))
-        .json(&SignupBody {
-            email: email.clone(),
-            password,
-        })
+        .json(&signup_body)
         .send()
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::CREATED);
 
-    let updated_password = faker::internet::en::Password(10..40).fake();
+    let mut new_signup_body = Faker.fake::<TestSignupBody>();
+    new_signup_body.email = signup_body.email.clone();
 
     let update_response = client
         .post(format!("{}/accounts/signup", &test_state.server_url))
-        .json(&SignupBody {
-            email: email.clone(),
-            password: updated_password,
-        })
+        .json(&new_signup_body)
         .send()
         .await
         .unwrap();

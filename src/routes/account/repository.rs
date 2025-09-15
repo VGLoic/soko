@@ -2,6 +2,7 @@ use super::domain::{
     Account, AccountQueryError, AccountVerificationTicket, SignupError, SignupRequest,
     VerifyAccountError,
 };
+use crate::newtypes::Email;
 use anyhow::anyhow;
 use async_trait::async_trait;
 use sqlx::{Pool, Postgres, types::uuid};
@@ -16,7 +17,7 @@ pub trait AccountRepository: Send + Sync {
     /// # Errors
     /// * `AccountQueryError::Unknown` - unknown error
     /// * `AccountQueryError::AccountNotFound` - account not found
-    async fn get_account_by_email(&self, email: &str) -> Result<Account, AccountQueryError>;
+    async fn get_account_by_email(&self, email: &Email) -> Result<Account, AccountQueryError>;
 
     /// Get an account by email with active verification ticket
     ///
@@ -28,7 +29,7 @@ pub trait AccountRepository: Send + Sync {
     /// * `AccountQueryError::AccountNotFound` - account not found
     async fn get_account_by_email_with_verification_ticket(
         &self,
-        email: &str,
+        email: &Email,
     ) -> Result<(Account, Option<AccountVerificationTicket>), AccountQueryError>;
 
     /// Create an account and creates an active verification ticket
@@ -82,7 +83,7 @@ impl From<Pool<Postgres>> for PostgresAccountRepository {
 
 #[async_trait]
 impl AccountRepository for PostgresAccountRepository {
-    async fn get_account_by_email(&self, email: &str) -> Result<Account, AccountQueryError> {
+    async fn get_account_by_email(&self, email: &Email) -> Result<Account, AccountQueryError> {
         let query_result = sqlx::query_as::<_, Account>(
             r#"
                 SELECT
@@ -116,7 +117,7 @@ impl AccountRepository for PostgresAccountRepository {
 
     async fn get_account_by_email_with_verification_ticket(
         &self,
-        email: &str,
+        email: &Email,
     ) -> Result<(Account, Option<AccountVerificationTicket>), AccountQueryError> {
         let account = self.get_account_by_email(email).await?;
         let verification_ticket = match sqlx::query_as::<_, AccountVerificationTicket>(

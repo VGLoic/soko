@@ -1,8 +1,10 @@
 use std::{collections::HashMap, net::SocketAddr, sync::Arc, time::Duration};
 
+use anyhow::anyhow;
 use async_trait::async_trait;
 use soko::{
     Config,
+    newtypes::Email,
     routes::{PostgresAccountRepository, app_router},
     third_party::MailingService,
 };
@@ -71,7 +73,7 @@ pub async fn setup() -> Result<TestState, anyhow::Error> {
 
 #[derive(Clone, Debug)]
 pub struct FakeMailingService {
-    verification_secrets: Arc<RwLock<HashMap<String, String>>>,
+    verification_secrets: Arc<RwLock<HashMap<Email, String>>>,
 }
 
 impl FakeMailingService {
@@ -83,10 +85,11 @@ impl FakeMailingService {
 
     #[allow(dead_code)]
     pub fn get_verification_secret(&self, email: &str) -> Result<Option<String>, anyhow::Error> {
+        let email = Email::new(email).map_err(|_| anyhow!("failed to map str email to email"))?;
         let secret = self
             .verification_secrets
             .try_read()?
-            .get(email)
+            .get(&email)
             .map(|v| v.to_owned());
         Ok(secret)
     }
@@ -94,10 +97,10 @@ impl FakeMailingService {
 
 #[async_trait]
 impl MailingService for FakeMailingService {
-    async fn send_email(&self, email: &str, content: &str) -> Result<(), anyhow::Error> {
+    async fn send_email(&self, email: &Email, content: &str) -> Result<(), anyhow::Error> {
         self.verification_secrets
             .try_write()?
-            .insert(email.to_string(), content.to_owned());
+            .insert(email.clone(), content.to_owned());
         Ok(())
     }
 }
