@@ -25,7 +25,7 @@ impl<T> Dummy<T> for TestSignupBody {
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct TestVerifyEmailBody {
+struct TestVerifyAccountBody {
     email: String,
     secret: String,
 }
@@ -67,7 +67,7 @@ async fn test_account_email_verification() {
 
     let response = client
         .post(format!("{}/accounts/verify-email", &test_state.server_url))
-        .json(&TestVerifyEmailBody {
+        .json(&TestVerifyAccountBody {
             email: signup_body.email.clone(),
             secret: test_state
                 .mailing_service
@@ -96,7 +96,7 @@ async fn test_forbidden_signup_once_verified() {
         .unwrap();
     client
         .post(format!("{}/accounts/verify-email", &test_state.server_url))
-        .json(&TestVerifyEmailBody {
+        .json(&TestVerifyAccountBody {
             email: signup_body.email.clone(),
             secret: test_state
                 .mailing_service
@@ -111,7 +111,7 @@ async fn test_forbidden_signup_once_verified() {
     assert_eq!(
         client
             .post(format!("{}/accounts/verify-email", &test_state.server_url))
-            .json(&TestVerifyEmailBody {
+            .json(&TestVerifyAccountBody {
                 email: signup_body.email.clone(),
                 secret: test_state
                     .mailing_service

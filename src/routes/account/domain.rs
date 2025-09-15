@@ -2,12 +2,11 @@ use chrono::{DateTime, TimeDelta, Utc};
 use sqlx::{prelude::FromRow, types::uuid};
 use thiserror::Error;
 use tracing::warn;
-use validator::{ValidationError, ValidationErrors};
 
-use crate::newtypes::{Email, EmailError, PasswordError};
+use crate::newtypes::Email;
 
 use super::{
-    SignupBody, VerifyEmailBody, verification_secret_strategy::VerificationSecretStrategy,
+    SignupBody, VerifyAccountBody, verification_secret_strategy::VerificationSecretStrategy,
 };
 
 #[derive(FromRow, Clone, Debug)]
@@ -75,43 +74,10 @@ pub struct SignupRequest {
 /// Errors in the construction of the [SignupRequest]
 #[derive(Error, Debug)]
 pub enum SignupRequestError {
-    #[error("Invalid body, got errors: {0}")]
-    InvalidBody(ValidationErrors),
     #[error("A verified account already exist for the email: {email}")]
     AccountAlreadyVerified { email: Email },
     #[error(transparent)]
     Unknown(#[from] anyhow::Error),
-}
-
-impl From<EmailError> for SignupRequestError {
-    fn from(value: EmailError) -> Self {
-        let mut validation_errors = ValidationErrors::new();
-        let error =
-            match value {
-                EmailError::Empty => ValidationError::new("invalid-email")
-                    .with_message("empty is not allowed".into()),
-                EmailError::InvalidFormat => ValidationError::new("invalid-email")
-                    .with_message("invalid email format".into()),
-            };
-        validation_errors.add("email", error);
-        SignupRequestError::InvalidBody(validation_errors)
-    }
-}
-
-impl From<PasswordError> for SignupRequestError {
-    fn from(value: PasswordError) -> Self {
-        let mut validation_errors = ValidationErrors::new();
-        let error = match value {
-            PasswordError::Empty => {
-                ValidationError::new("invalid-password").with_message("empty is not allowed".into())
-            }
-            PasswordError::InvalidPassword(reason) => {
-                ValidationError::new("invalid-password").with_message(reason.into())
-            }
-        };
-        validation_errors.add("password", error);
-        SignupRequestError::InvalidBody(validation_errors)
-    }
 }
 
 impl SignupRequest {
@@ -258,7 +224,7 @@ pub enum VerifyAccountRequestError {
 
 impl VerifyAccountRequest {
     pub fn try_from_body(
-        body: VerifyEmailBody,
+        body: VerifyAccountBody,
         account: Account,
         verification_ticket: Option<AccountVerificationTicket>,
     ) -> Result<VerifyAccountRequest, VerifyAccountRequestError> {
@@ -328,14 +294,14 @@ mod verify_account_tests {
         }
     }
 
-    fn setup() -> (Account, AccountVerificationTicket, VerifyEmailBody) {
+    fn setup() -> (Account, AccountVerificationTicket, VerifyAccountBody) {
         let signup_body = SignupBody {
             email: Faker.fake(),
             password: Faker.fake(),
         };
         let signup_request = SignupRequest::try_from_body(signup_body.clone()).unwrap();
 
-        let verify_account_body = VerifyEmailBody {
+        let verify_account_body = VerifyAccountBody {
             email: signup_body.email.clone(),
             secret: signup_request.verification_plaintext,
         };

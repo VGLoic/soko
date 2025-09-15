@@ -5,7 +5,6 @@ use axum::{
     response::{IntoResponse, Response},
     routing::post,
 };
-use base64::{Engine, prelude::BASE64_URL_SAFE};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use tracing::{error, warn};
@@ -172,7 +171,6 @@ impl From<SignupRequestError> for ApiError {
                 );
                 ApiError::BadRequest(errors)
             }
-            SignupRequestError::InvalidBody(errors) => ApiError::BadRequest(errors),
         }
     }
 }
@@ -183,23 +181,10 @@ impl From<SignupRequestError> for ApiError {
 
 #[derive(Debug, Validate, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct VerifyEmailBody {
+pub struct VerifyAccountBody {
     pub email: Email,
-    // REMIND ME
-    #[validate(custom(function = "validate_base64url"))]
+    #[validate(length(min = 1))]
     pub secret: String,
-}
-
-fn validate_base64url(value: &str) -> Result<(), ValidationError> {
-    if value.is_empty() {
-        return Err(ValidationError::new("empty_string"));
-    }
-
-    if BASE64_URL_SAFE.decode(value).is_err() {
-        return Err(ValidationError::new("invalid_base64url"));
-    }
-
-    Ok(())
 }
 
 impl From<VerifyAccountRequestError> for ApiError {
@@ -238,7 +223,7 @@ impl From<VerifyAccountError> for ApiError {
 
 async fn verify_email(
     State(app_state): State<AppState>,
-    ValidatedJson(body): ValidatedJson<VerifyEmailBody>,
+    ValidatedJson(body): ValidatedJson<VerifyAccountBody>,
 ) -> Result<(StatusCode, Json<AccountResponse>), ApiError> {
     let (existing_account, verification_ticket) = app_state
         .account_repository
