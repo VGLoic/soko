@@ -190,7 +190,7 @@ mod signup_tests {
         let mut account: Account = Faker.fake();
         account.verified = true;
         let signup_body = SignupBody {
-            email: faker::internet::en::SafeEmail().fake(),
+            email: Faker.fake(),
             password: Faker.fake(),
         };
 
