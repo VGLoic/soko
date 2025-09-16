@@ -7,7 +7,7 @@ use sha3::Sha3_256;
 use sqlx::prelude::FromRow;
 use thiserror::Error;
 
-use crate::{OpaqueString, routes::accounts::Account};
+use crate::{Opaque, routes::accounts::Account};
 
 use super::CreateAccessTokenBody;
 
@@ -53,7 +53,7 @@ pub const MAX_NAME_LENGTH: usize = 40;
 pub struct CreateAccessTokenRequest {
     pub account_id: uuid::Uuid,
     pub name: String,
-    pub token: OpaqueString,
+    pub token: Opaque<String>,
     pub mac: [u8; 32],
     pub expires_at: DateTime<Utc>,
 }
@@ -82,7 +82,7 @@ impl CreateAccessTokenRequest {
     pub fn try_from_body(
         body: CreateAccessTokenBody,
         account: &Account,
-        hmac_secret: OpaqueString,
+        hmac_secret: Opaque<String>,
     ) -> Result<Self, CreateAccessTokenRequestError> {
         if body.password.verify(&account.password_hash).is_err() {
             return Err(CreateAccessTokenRequestError::InvalidPassword);
@@ -121,7 +121,7 @@ impl CreateAccessTokenRequest {
         Ok(CreateAccessTokenRequest {
             account_id: account.id,
             name: trimmed_name.to_string(),
-            token: OpaqueString::new(token),
+            token: Opaque::new(token),
             mac,
             expires_at,
         })
@@ -151,7 +151,7 @@ mod create_access_token_tests {
         let result = CreateAccessTokenRequest::try_from_body(
             body,
             &account,
-            OpaqueString::new("test-hmac-secret".into()),
+            Opaque::new("test-hmac-secret".into()),
         );
 
         assert!(matches!(
@@ -176,7 +176,7 @@ mod create_access_token_tests {
         let result = CreateAccessTokenRequest::try_from_body(
             body,
             &account,
-            OpaqueString::new("test-hmac-secret".into()),
+            Opaque::new("test-hmac-secret".into()),
         );
 
         assert!(matches!(
@@ -201,7 +201,7 @@ mod create_access_token_tests {
         let result = CreateAccessTokenRequest::try_from_body(
             body,
             &account,
-            OpaqueString::new("test-hmac-secret".into()),
+            Opaque::new("test-hmac-secret".into()),
         );
 
         assert!(matches!(
@@ -229,7 +229,7 @@ mod create_access_token_tests {
         let result = CreateAccessTokenRequest::try_from_body(
             body,
             &account,
-            OpaqueString::new("test-hmac-secret".into()),
+            Opaque::new("test-hmac-secret".into()),
         );
 
         assert!(matches!(
@@ -254,7 +254,7 @@ mod create_access_token_tests {
         let result = CreateAccessTokenRequest::try_from_body(
             body,
             &account,
-            OpaqueString::new("test-hmac-secret".into()),
+            Opaque::new("test-hmac-secret".into()),
         );
 
         assert!(matches!(
@@ -279,7 +279,7 @@ mod create_access_token_tests {
         let result = CreateAccessTokenRequest::try_from_body(
             body,
             &account,
-            OpaqueString::new("test-hmac-secret".into()),
+            Opaque::new("test-hmac-secret".into()),
         );
 
         assert!(matches!(

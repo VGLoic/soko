@@ -7,13 +7,13 @@ use tracing::Level;
 pub mod newtypes;
 pub mod routes;
 pub mod third_party;
-use newtypes::OpaqueString;
+use newtypes::Opaque;
 
 pub struct Config {
     pub port: u16,
     pub log_level: Level,
-    pub database_url: OpaqueString,
-    pub access_token_secret: OpaqueString,
+    pub database_url: Opaque<String>,
+    pub access_token_secret: Opaque<String>,
 }
 
 impl Config {
@@ -59,8 +59,8 @@ impl Config {
         Ok(Config {
             port,
             log_level,
-            database_url: OpaqueString::new(database_url),
-            access_token_secret: OpaqueString::new(access_token_secret),
+            database_url: Opaque::new(database_url),
+            access_token_secret: Opaque::new(access_token_secret),
         })
     }
 }

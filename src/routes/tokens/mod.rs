@@ -5,7 +5,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use validator::{Validate, ValidationError, ValidationErrors};
 
-use crate::newtypes::{Email, OpaqueString};
+use crate::newtypes::{Email, Opaque};
 mod domain;
 use super::{ApiError, ValidatedJson};
 use domain::{
@@ -19,7 +19,7 @@ pub use repository::{AccessTokenRepository, PostgresAccessTokenRepository};
 
 use super::{AppState, newtypes::Password};
 
-pub fn tokens_router(access_token_secret: OpaqueString) -> Router<AppState> {
+pub fn tokens_router(access_token_secret: Opaque<String>) -> Router<AppState> {
     Router::new().route(
         "/",
         post(create_access_token.layer(Extension(access_token_secret))),
@@ -56,7 +56,7 @@ pub struct CreateAccessTokenBody {
 pub struct AccessTokenCreatedResponse {
     pub id: uuid::Uuid,
     pub name: String,
-    pub access_token: OpaqueString,
+    pub access_token: Opaque<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
@@ -65,7 +65,7 @@ pub struct AccessTokenCreatedResponse {
 
 async fn create_access_token(
     State(app_state): State<AppState>,
-    Extension(access_token_secret): Extension<OpaqueString>,
+    Extension(access_token_secret): Extension<Opaque<String>>,
     ValidatedJson(body): ValidatedJson<CreateAccessTokenBody>,
 ) -> Result<(StatusCode, Json<AccessTokenCreatedResponse>), ApiError> {
     let account = app_state

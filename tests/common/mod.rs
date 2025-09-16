@@ -7,7 +7,7 @@ use fake::{Dummy, Fake, faker};
 use serde::Serialize;
 use soko::{
     Config,
-    newtypes::{Email, OpaqueString},
+    newtypes::{Email, Opaque},
     routes::{
         accounts::PostgresAccountRepository, app_router, tokens::PostgresAccessTokenRepository,
     },
@@ -80,8 +80,8 @@ pub async fn setup() -> Result<TestState, anyhow::Error> {
     let config = Config {
         port: 0,
         log_level: Level::TRACE,
-        database_url: OpaqueString::new(INTEGRATION_DATABASE_URL.to_string()),
-        access_token_secret: OpaqueString::new(BASE64_STANDARD_NO_PAD.encode("hello-world")),
+        database_url: Opaque::new(INTEGRATION_DATABASE_URL.to_string()),
+        access_token_secret: Opaque::new(BASE64_STANDARD_NO_PAD.encode("hello-world")),
     };
 
     let pool = PgPoolOptions::new()

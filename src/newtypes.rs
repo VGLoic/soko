@@ -9,27 +9,39 @@ use validator::ValidateEmail;
 // #######################################################
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct OpaqueString(String);
+#[serde(transparent)]
+pub struct Opaque<T>(T)
+where
+    T: Clone + Serialize;
 
-impl OpaqueString {
-    pub fn new(v: String) -> Self {
+impl<T> Opaque<T>
+where
+    T: Clone + Serialize,
+{
+    pub fn new(v: T) -> Self {
         Self(v)
     }
 
-    /// Extract the inner value to a reference.
+    /// Extract the inner value as a reference.
     /// Use it with caution
-    pub fn extract_inner(&self) -> &str {
+    pub fn extract_inner(&self) -> &T {
         &self.0
     }
 }
 
-impl std::fmt::Display for OpaqueString {
+impl<T> std::fmt::Display for Opaque<T>
+where
+    T: Clone + Serialize,
+{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "*********")
     }
 }
 
-impl Debug for OpaqueString {
+impl<T> Debug for Opaque<T>
+where
+    T: Clone + Serialize,
+{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "*********")
     }
