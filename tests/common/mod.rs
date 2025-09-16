@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use soko::{
     Config,
     newtypes::Email,
-    routes::{PostgresAccountRepository, app_router},
+    routes::{PostgresAccessTokenRepository, PostgresAccountRepository, app_router},
     third_party::MailingService,
 };
 use sqlx::postgres::PgPoolOptions;
@@ -45,11 +45,17 @@ pub async fn setup() -> Result<TestState, anyhow::Error> {
         .await
         .map_err(|e| anyhow::anyhow!("Failed to run database migrations: {e}"))?;
 
-    let account_repository = PostgresAccountRepository::from(pool);
+    let account_repository = PostgresAccountRepository::from(pool.clone());
+    let access_token_repository = PostgresAccessTokenRepository::from(pool.clone());
     let mailing_service = FakeMailingService::new();
 
-    let app = app_router(&config, account_repository, mailing_service.clone())
-        .layer(TraceLayer::new_for_http());
+    let app = app_router(
+        &config,
+        account_repository,
+        access_token_repository,
+        mailing_service.clone(),
+    )
+    .layer(TraceLayer::new_for_http());
 
     // Giving 0 as port here will let the system dynamically find an available port
     // This is needed in order to let our test run in parallel

@@ -19,6 +19,19 @@ pub trait AccountRepository: Send + Sync {
     /// * `AccountQueryError::AccountNotFound` - account not found
     async fn get_account_by_email(&self, email: &Email) -> Result<Account, AccountQueryError>;
 
+    /// Get a verified account by email
+    ///
+    /// # Arguments
+    /// * `email` - Email of the account
+    ///
+    /// # Errors
+    /// * `AccountQueryError::Unknown` - unknown error
+    /// * `AccountQueryError::AccountNotFound` - verified account not found
+    async fn get_verified_account_by_email(
+        &self,
+        email: &Email,
+    ) -> Result<Account, AccountQueryError>;
+
     /// Get an account by email with active verification ticket
     ///
     /// # Arguments
@@ -35,9 +48,7 @@ pub trait AccountRepository: Send + Sync {
     /// Create an account and creates an active verification ticket
     ///
     /// # Arguments
-    /// * `email` - Email of the account,
-    /// * `password_hash` - Hash of the password,
-    /// * `verification_cyphertext` - Cyphertext of the verification ticket
+    /// * `signup_request` - DTO for signup
     ///
     /// # Errors
     /// * `SignupError::Unknown` - unknown error
@@ -113,6 +124,17 @@ impl AccountRepository for PostgresAccountRepository {
                 }
             }
         }
+    }
+
+    async fn get_verified_account_by_email(
+        &self,
+        email: &Email,
+    ) -> Result<Account, AccountQueryError> {
+        let account = self.get_account_by_email(email).await?;
+        if !account.verified {
+            return Err(AccountQueryError::AccountNotFound);
+        }
+        Ok(account)
     }
 
     async fn get_account_by_email_with_verification_ticket(

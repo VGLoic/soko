@@ -120,7 +120,7 @@ mod signup_tests {
     use chrono::Days;
     use fake::{Dummy, Fake, Faker, faker};
 
-    use crate::routes::account::verification_secret_strategy::VerificationSecretStrategy;
+    use crate::routes::accounts::verification_secret_strategy::VerificationSecretStrategy;
 
     use super::*;
 
@@ -269,7 +269,7 @@ mod verify_account_tests {
     use chrono::Days;
     use fake::{Dummy, Fake, Faker, faker};
 
-    use crate::routes::account::verification_secret_strategy::VerificationSecretStrategy;
+    use crate::routes::accounts::verification_secret_strategy::VerificationSecretStrategy;
 
     use super::*;
 
