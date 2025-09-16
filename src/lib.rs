@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use base64::prelude::*;
 use std::{
     env::{self, VarError},
@@ -53,27 +54,19 @@ impl Config {
                     "".to_string()
                 }
             };
-        let access_token_secret: [u8; 32] =
-            match BASE64_STANDARD_NO_PAD.decode(access_token_secret_string) {
-                Ok(v) => {
-                    if v.len() != 32 {
-                        errors.push("invalid size for ACCESS_TOKEN_SECRET".into());
-                        [0u8; 32]
-                    } else {
-                        let mut a = [0; 32];
-                        a.clone_from_slice(&v);
-                        a
-                    }
-                }
-                Err(e) => {
-                    errors.push(e.to_string());
-                    [0u8; 32]
-                }
-            };
 
         if !errors.is_empty() {
             return Err(anyhow::anyhow!(errors.join(", ")));
         }
+        let decoded_access_token_secret = BASE64_STANDARD
+            .decode(access_token_secret_string)
+            .map_err(|e| anyhow!(e).context("failed to decode ACCESS_TOKEN_SECRET from base64"))?;
+        if decoded_access_token_secret.len() != 32 {
+            return Err(anyhow!("invalid size for ACCESS_TOKEN_SECRET"));
+        }
+        let mut access_token_secret = [0u8; 32];
+        access_token_secret.clone_from_slice(&decoded_access_token_secret);
+
         Ok(Config {
             port,
             log_level,
