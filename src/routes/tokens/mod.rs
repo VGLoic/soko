@@ -100,7 +100,7 @@ impl From<CreateAccessTokenError> for ApiError {
             CreateAccessTokenError::ActiveTokenLimitReached(_) => {
                 let mut validation_errors = ValidationErrors::new();
                 validation_errors.add(
-                    "name",
+                    "global",
                     ValidationError::new("too-many-tokens")
                         .with_message("limit of active access token reached".into()),
                 );
