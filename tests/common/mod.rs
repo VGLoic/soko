@@ -2,6 +2,8 @@ use std::{collections::HashMap, net::SocketAddr, sync::Arc, time::Duration};
 
 use anyhow::anyhow;
 use async_trait::async_trait;
+use fake::{Dummy, Fake, faker};
+use serde::Serialize;
 use soko::{
     Config,
     newtypes::Email,
@@ -13,6 +15,51 @@ use tokio::sync::RwLock;
 use tower_http::trace::TraceLayer;
 use tracing::{Level, info, level_filters::LevelFilter};
 use tracing_subscriber::{Layer, layer::SubscriberExt, util::SubscriberInitExt};
+
+// ################################################################
+// ####################### REQUEST PAYLOADS #######################
+// ################################################################
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
+pub struct TestSignupBody {
+    pub email: String,
+    pub password: String,
+}
+
+impl<T> Dummy<T> for TestSignupBody {
+    fn dummy_with_rng<R: rand::Rng + ?Sized>(_: &T, rng: &mut R) -> Self {
+        let mut password: String = faker::internet::en::Password(10..36).fake_with_rng(rng);
+        password += "6;9+";
+        TestSignupBody {
+            email: faker::internet::en::SafeEmail().fake_with_rng(rng),
+            password,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
+pub struct TestVerifyAccountBody {
+    pub email: String,
+    pub secret: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
+pub struct TestCreateAccessTokenBody {
+    pub email: String,
+    pub password: String,
+    pub name: String,
+    pub lifetime: u32,
+}
+
+// ##########################################################
+// ####################### TEST STATE #######################
+// ##########################################################
 
 #[allow(dead_code)]
 pub struct TestState {

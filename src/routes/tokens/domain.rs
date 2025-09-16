@@ -45,6 +45,9 @@ pub struct AccessToken {
 // ################## ACCESS TOKEN CREATION ##################
 // ###########################################################
 
+pub const MAX_LIFETIME: u32 = 90 * 24 * 60 * 60; // 90 days
+pub const MAX_ACTIVE_TOKENS: u8 = 3;
+
 #[derive(Clone, Debug)]
 pub struct CreateAccessTokenRequest {
     pub account_id: uuid::Uuid,
@@ -95,7 +98,7 @@ impl CreateAccessTokenRequest {
         if body.lifetime == 0 {
             return Err(CreateAccessTokenRequestError::InvalidLifetime);
         }
-        if body.lifetime > 90 * 24 * 60 * 60 {
+        if body.lifetime > MAX_LIFETIME {
             return Err(CreateAccessTokenRequestError::InvalidLifetime);
         }
 

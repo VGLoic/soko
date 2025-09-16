@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS "access_token" (
     mac             bytea           NOT NULL    CHECK (length(mac) = 32),
     created_at      TIMESTAMPTZ     NOT NULL    DEFAULT CURRENT_TIMESTAMP,
     updated_at      TIMESTAMPTZ     NOT NULL    DEFAULT CURRENT_TIMESTAMP,
+    last_used_at    TIMESTAMPTZ     NOT NULL    DEFAULT CURRENT_TIMESTAMP,
     expires_at      TIMESTAMPTZ     NOT NULL,
     revoked_at      TIMESTAMPTZ
 );

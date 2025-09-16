@@ -81,6 +81,7 @@ impl AccessTokenRepository for PostgresAccessTokenRepository {
                 mac,
                 created_at,
                 updated_at,
+                last_used_at,
                 expires_at,
                 revoked_at
         "#,

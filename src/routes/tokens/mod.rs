@@ -8,7 +8,7 @@ mod domain;
 use super::{ApiError, ValidatedJson};
 use domain::{
     CreateAccessTokenError, CreateAccessTokenRequest, CreateAccessTokenRequestError,
-    TokenQueryError,
+    MAX_ACTIVE_TOKENS, TokenQueryError,
 };
 mod repository;
 pub use repository::{AccessTokenRepository, PostgresAccessTokenRepository};
@@ -72,7 +72,7 @@ async fn create_access_token(
 
     let access_token = app_state
         .access_token_repository
-        .create_token(&req, 3)
+        .create_token(&req, MAX_ACTIVE_TOKENS)
         .await?;
 
     Ok((
