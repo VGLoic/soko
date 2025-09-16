@@ -19,7 +19,7 @@ use super::{
 };
 
 pub fn tokens_router() -> Router<AppState> {
-    Router::new().route("/tokens", post(create_access_token))
+    Router::new().route("/", post(create_access_token))
 }
 
 // ############################################

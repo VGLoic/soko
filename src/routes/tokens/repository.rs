@@ -48,7 +48,7 @@ impl AccessTokenRepository for PostgresAccessTokenRepository {
             r#"
             SELECT COUNT(*)
             FROM "access_token"
-            WHERE "account_id" = $1 AND "revoked_at" IS NULL AND NOW < "expires_at"
+            WHERE "account_id" = $1 AND "revoked_at" IS NULL AND "expires_at" > CURRENT_TIMESTAMP
         "#,
         )
         .bind(req.account_id)
