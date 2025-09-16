@@ -123,3 +123,140 @@ impl CreateAccessTokenRequest {
         })
     }
 }
+
+#[cfg(test)]
+mod create_access_token_tests {
+    use fake::{Fake, Faker};
+
+    use crate::routes::accounts::Account;
+
+    use super::*;
+
+    #[test]
+    fn test_try_from_body_with_invalid_password() {
+        let account: Account = Faker.fake();
+        let wrong_password: crate::routes::newtypes::Password = Faker.fake();
+
+        let body = CreateAccessTokenBody {
+            email: account.email.clone(),
+            password: wrong_password,
+            name: "test-token".to_string(),
+            lifetime: 3600, // 1 hour
+        };
+
+        let result = CreateAccessTokenRequest::try_from_body(body, &account, "test-hmac-secret");
+
+        assert!(matches!(
+            result,
+            Err(CreateAccessTokenRequestError::InvalidPassword)
+        ));
+    }
+
+    #[test]
+    fn test_try_from_body_with_empty_name() {
+        let mut account: Account = Faker.fake();
+        let password: crate::routes::newtypes::Password = Faker.fake();
+        account.password_hash = password.hash().unwrap();
+
+        let body = CreateAccessTokenBody {
+            email: account.email.clone(),
+            password,
+            name: "".to_string(),
+            lifetime: 3600, // 1 hour
+        };
+
+        let result = CreateAccessTokenRequest::try_from_body(body, &account, "test-hmac-secret");
+
+        assert!(matches!(
+            result,
+            Err(CreateAccessTokenRequestError::InvalidName)
+        ));
+    }
+
+    #[test]
+    fn test_try_from_body_with_whitespace_only_name() {
+        let mut account: Account = Faker.fake();
+        let password: crate::routes::newtypes::Password = Faker.fake();
+        account.password_hash = password.hash().unwrap();
+
+        let body = CreateAccessTokenBody {
+            email: account.email.clone(),
+            password,
+            name: "   \t\n  ".to_string(),
+            lifetime: 3600, // 1 hour
+        };
+
+        let result = CreateAccessTokenRequest::try_from_body(body, &account, "test-hmac-secret");
+
+        assert!(matches!(
+            result,
+            Err(CreateAccessTokenRequestError::InvalidName)
+        ));
+    }
+
+    #[test]
+    fn test_try_from_body_with_name_too_long() {
+        let mut account: Account = Faker.fake();
+        let password: crate::routes::newtypes::Password = Faker.fake();
+        account.password_hash = password.hash().unwrap();
+
+        // Create a name longer than 40 characters
+        let long_name = "a".repeat(41);
+
+        let body = CreateAccessTokenBody {
+            email: account.email.clone(),
+            password,
+            name: long_name,
+            lifetime: 3600, // 1 hour
+        };
+
+        let result = CreateAccessTokenRequest::try_from_body(body, &account, "test-hmac-secret");
+
+        assert!(matches!(
+            result,
+            Err(CreateAccessTokenRequestError::InvalidName)
+        ));
+    }
+
+    #[test]
+    fn test_try_from_body_with_zero_lifetime() {
+        let mut account: Account = Faker.fake();
+        let password: crate::routes::newtypes::Password = Faker.fake();
+        account.password_hash = password.hash().unwrap();
+
+        let body = CreateAccessTokenBody {
+            email: account.email.clone(),
+            password,
+            name: "test-token".to_string(),
+            lifetime: 0,
+        };
+
+        let result = CreateAccessTokenRequest::try_from_body(body, &account, "test-hmac-secret");
+
+        assert!(matches!(
+            result,
+            Err(CreateAccessTokenRequestError::InvalidLifetime)
+        ));
+    }
+
+    #[test]
+    fn test_try_from_body_with_lifetime_too_big() {
+        let mut account: Account = Faker.fake();
+        let password: crate::routes::newtypes::Password = Faker.fake();
+        account.password_hash = password.hash().unwrap();
+
+        let body = CreateAccessTokenBody {
+            email: account.email.clone(),
+            password,
+            name: "test-token".to_string(),
+            lifetime: MAX_LIFETIME + 1,
+        };
+
+        let result = CreateAccessTokenRequest::try_from_body(body, &account, "test-hmac-secret");
+
+        assert!(matches!(
+            result,
+            Err(CreateAccessTokenRequestError::InvalidLifetime)
+        ));
+    }
+}
