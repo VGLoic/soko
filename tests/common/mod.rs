@@ -2,10 +2,14 @@ use std::{collections::HashMap, net::SocketAddr, sync::Arc, time::Duration};
 
 use anyhow::anyhow;
 use async_trait::async_trait;
+use fake::{Dummy, Fake, faker};
+use serde::Serialize;
 use soko::{
     Config,
-    newtypes::Email,
-    routes::{PostgresAccountRepository, app_router},
+    newtypes::{Email, Opaque},
+    routes::{
+        accounts::PostgresAccountRepository, app_router, tokens::PostgresAccessTokenRepository,
+    },
     third_party::MailingService,
 };
 use sqlx::postgres::PgPoolOptions;
@@ -13,6 +17,51 @@ use tokio::sync::RwLock;
 use tower_http::trace::TraceLayer;
 use tracing::{Level, info, level_filters::LevelFilter};
 use tracing_subscriber::{Layer, layer::SubscriberExt, util::SubscriberInitExt};
+
+// ################################################################
+// ####################### REQUEST PAYLOADS #######################
+// ################################################################
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
+pub struct TestSignupBody {
+    pub email: String,
+    pub password: String,
+}
+
+impl<T> Dummy<T> for TestSignupBody {
+    fn dummy_with_rng<R: rand::Rng + ?Sized>(_: &T, rng: &mut R) -> Self {
+        let mut password: String = faker::internet::en::Password(10..36).fake_with_rng(rng);
+        password += "6;9+";
+        TestSignupBody {
+            email: faker::internet::en::SafeEmail().fake_with_rng(rng),
+            password,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
+pub struct TestVerifyAccountBody {
+    pub email: String,
+    pub secret: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
+pub struct TestCreateAccessTokenBody {
+    pub email: String,
+    pub password: String,
+    pub name: String,
+    pub lifetime: u32,
+}
+
+// ##########################################################
+// ####################### TEST STATE #######################
+// ##########################################################
 
 #[allow(dead_code)]
 pub struct TestState {
@@ -30,13 +79,14 @@ pub async fn setup() -> Result<TestState, anyhow::Error> {
     let config = Config {
         port: 0,
         log_level: Level::TRACE,
-        database_url: INTEGRATION_DATABASE_URL.to_string(),
+        database_url: Opaque::new(INTEGRATION_DATABASE_URL.to_string()),
+        access_token_secret: Opaque::new(rand::random()),
     };
 
     let pool = PgPoolOptions::new()
         .max_connections(5)
         .acquire_timeout(Duration::from_secs(5))
-        .connect(&config.database_url)
+        .connect(config.database_url.extract_inner())
         .await
         .map_err(|e| anyhow::anyhow!("Failed to establish connection to database: {e}"))?;
 
@@ -45,11 +95,17 @@ pub async fn setup() -> Result<TestState, anyhow::Error> {
         .await
         .map_err(|e| anyhow::anyhow!("Failed to run database migrations: {e}"))?;
 
-    let account_repository = PostgresAccountRepository::from(pool);
+    let account_repository = PostgresAccountRepository::from(pool.clone());
+    let access_token_repository = PostgresAccessTokenRepository::from(pool.clone());
     let mailing_service = FakeMailingService::new();
 
-    let app = app_router(&config, account_repository, mailing_service.clone())
-        .layer(TraceLayer::new_for_http());
+    let app = app_router(
+        &config,
+        account_repository,
+        access_token_repository,
+        mailing_service.clone(),
+    )
+    .layer(TraceLayer::new_for_http());
 
     // Giving 0 as port here will let the system dynamically find an available port
     // This is needed in order to let our test run in parallel

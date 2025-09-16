@@ -8,7 +8,9 @@ use axum::{
 use dotenvy::dotenv;
 use soko::{
     Config,
-    routes::{PostgresAccountRepository, app_router},
+    routes::{
+        accounts::PostgresAccountRepository, app_router, tokens::PostgresAccessTokenRepository,
+    },
     third_party::ToBeImplementedMailingService,
 };
 use sqlx::postgres::PgPoolOptions;
@@ -50,7 +52,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let pool = match PgPoolOptions::new()
         .max_connections(5)
         .acquire_timeout(Duration::from_secs(5))
-        .connect(&config.database_url)
+        .connect(config.database_url.extract_inner())
         .await
     {
         Ok(c) => c,
@@ -71,10 +73,17 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let x_request_id = HeaderName::from_static(REQUEST_ID_HEADER);
 
-    let account_repository = PostgresAccountRepository::from(pool);
+    let account_repository = PostgresAccountRepository::from(pool.clone());
+    let access_token_repository = PostgresAccessTokenRepository::from(pool);
     let mailing_service = ToBeImplementedMailingService;
 
-    let app = app_router(&config, account_repository, mailing_service).layer((
+    let app = app_router(
+        &config,
+        account_repository,
+        access_token_repository,
+        mailing_service,
+    )
+    .layer((
         // Set `x-request-id` header for every request
         SetRequestIdLayer::new(x_request_id.clone(), MakeRequestUuid),
         // Log request and response

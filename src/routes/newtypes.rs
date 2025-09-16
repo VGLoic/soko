@@ -108,7 +108,6 @@ impl Password {
             .map(|v| v.to_string())
     }
 
-    #[allow(dead_code)]
     /// Verify a password validity against an Argon2id formatted key
     ///
     /// # Arguments

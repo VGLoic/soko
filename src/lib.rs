@@ -1,3 +1,5 @@
+use anyhow::anyhow;
+use base64::prelude::*;
 use std::{
     env::{self, VarError},
     str::FromStr,
@@ -7,11 +9,13 @@ use tracing::Level;
 pub mod newtypes;
 pub mod routes;
 pub mod third_party;
+use newtypes::Opaque;
 
 pub struct Config {
     pub port: u16,
     pub log_level: Level,
-    pub database_url: String,
+    pub database_url: Opaque<String>,
+    pub access_token_secret: Opaque<[u8; 32]>,
 }
 
 impl Config {
@@ -42,13 +46,32 @@ impl Config {
             }
         };
 
+        let access_token_secret_string =
+            match parse_required_env_variable::<String>("ACCESS_TOKEN_SECRET") {
+                Ok(v) => v,
+                Err(e) => {
+                    errors.push(e.to_string());
+                    "".to_string()
+                }
+            };
+
         if !errors.is_empty() {
             return Err(anyhow::anyhow!(errors.join(", ")));
         }
+        let decoded_access_token_secret = BASE64_STANDARD
+            .decode(access_token_secret_string)
+            .map_err(|e| anyhow!(e).context("failed to decode ACCESS_TOKEN_SECRET from base64"))?;
+        if decoded_access_token_secret.len() != 32 {
+            return Err(anyhow!("invalid size for ACCESS_TOKEN_SECRET"));
+        }
+        let mut access_token_secret = [0u8; 32];
+        access_token_secret.clone_from_slice(&decoded_access_token_secret);
+
         Ok(Config {
             port,
             log_level,
-            database_url,
+            database_url: Opaque::new(database_url),
+            access_token_secret: Opaque::new(access_token_secret),
         })
     }
 }

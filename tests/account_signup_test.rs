@@ -1,34 +1,10 @@
-use fake::{Dummy, Fake, Faker, faker};
+use fake::{Fake, Faker};
 use reqwest::StatusCode;
-use serde::Serialize;
-use soko::routes::AccountResponse;
+use soko::routes::accounts::AccountResponse;
+
+use crate::common::{TestSignupBody, TestVerifyAccountBody};
 
 mod common;
-
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct TestSignupBody {
-    email: String,
-    password: String,
-}
-
-impl<T> Dummy<T> for TestSignupBody {
-    fn dummy_with_rng<R: rand::Rng + ?Sized>(_: &T, rng: &mut R) -> Self {
-        let mut password: String = faker::internet::en::Password(10..36).fake_with_rng(rng);
-        password += "6;9+";
-        TestSignupBody {
-            email: faker::internet::en::SafeEmail().fake_with_rng(rng),
-            password,
-        }
-    }
-}
-
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct TestVerifyAccountBody {
-    email: String,
-    secret: String,
-}
 
 #[tokio::test]
 async fn test_account_signup() {

@@ -1,31 +1,27 @@
-use axum::{
-    Json, Router,
-    extract::{FromRequest, State},
-    http::StatusCode,
-    response::{IntoResponse, Response},
-    routing::post,
-};
+use axum::{Json, Router, extract::State, http::StatusCode, routing::post};
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
-use tracing::{error, warn};
+use serde::{Deserialize, Serialize};
+use tracing::error;
 use validator::{Validate, ValidationError, ValidationErrors};
 
-pub mod domain;
-mod repository;
-pub use repository::{AccountRepository, PostgresAccountRepository};
-
-use crate::newtypes::Email;
+mod domain;
+pub use domain::Account;
 use domain::{
-    Account, AccountQueryError, SignupError, SignupRequest, SignupRequestError, VerifyAccountError,
+    AccountQueryError, SignupError, SignupRequest, SignupRequestError, VerifyAccountError,
     VerifyAccountRequest, VerifyAccountRequestError,
 };
 
-use super::AppState;
-mod newtypes;
-mod verification_secret_strategy;
-use newtypes::Password;
+mod repository;
+pub use repository::{AccountRepository, PostgresAccountRepository};
 
-pub fn account_router() -> Router<AppState> {
+use super::{ApiError, ValidatedJson};
+use crate::newtypes::Email;
+
+use super::AppState;
+mod verification_secret_strategy;
+use super::newtypes::Password;
+
+pub fn accounts_router() -> Router<AppState> {
     Router::new()
         .route("/signup", post(signup_account))
         .route("/verify-email", post(verify_email))
@@ -34,26 +30,6 @@ pub fn account_router() -> Router<AppState> {
 // ############################################
 // ################## ERRORS ##################
 // ############################################
-
-#[derive(Debug)]
-pub enum ApiError {
-    InternalServerError(anyhow::Error),
-    BadRequest(ValidationErrors),
-    NotFound,
-}
-
-impl IntoResponse for ApiError {
-    fn into_response(self) -> Response {
-        match self {
-            Self::InternalServerError(e) => {
-                error!("{e}");
-                (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error").into_response()
-            }
-            Self::BadRequest(errors) => (StatusCode::BAD_REQUEST, Json(errors)).into_response(),
-            Self::NotFound => (StatusCode::NOT_FOUND, "Not found").into_response(),
-        }
-    }
-}
 
 impl From<AccountQueryError> for ApiError {
     fn from(value: AccountQueryError) -> Self {
@@ -241,33 +217,4 @@ async fn verify_email(
         .await?;
 
     Ok((StatusCode::OK, Json(updated_account.into())))
-}
-
-// ###########################################
-// ################## UTILS ##################
-// ###########################################
-
-struct ValidatedJson<T>(T);
-
-impl<S, T> FromRequest<S> for ValidatedJson<T>
-where
-    T: DeserializeOwned + Validate,
-    S: Send + Sync,
-{
-    type Rejection = Response;
-
-    async fn from_request(req: axum::extract::Request, state: &S) -> Result<Self, Self::Rejection> {
-        let payload: Json<T> = match Json::from_request(req, state).await {
-            Ok(p) => p,
-            Err(e) => {
-                warn!("{e}");
-                return Err((StatusCode::BAD_REQUEST, e.body_text()).into_response());
-            }
-        };
-        if let Err(e) = payload.validate() {
-            return Err((StatusCode::BAD_REQUEST, Json(e)).into_response());
-        }
-
-        Ok(Self(payload.0))
-    }
 }
