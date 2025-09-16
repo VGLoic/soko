@@ -1,3 +1,4 @@
+use base64::prelude::*;
 use std::{
     env::{self, VarError},
     str::FromStr,
@@ -13,7 +14,7 @@ pub struct Config {
     pub port: u16,
     pub log_level: Level,
     pub database_url: Opaque<String>,
-    pub access_token_secret: Opaque<String>,
+    pub access_token_secret: Opaque<[u8; 32]>,
 }
 
 impl Config {
@@ -44,14 +45,31 @@ impl Config {
             }
         };
 
-        let access_token_secret = match parse_required_env_variable::<String>("ACCESS_TOKEN_SECRET")
-        {
-            Ok(v) => v,
-            Err(e) => {
-                errors.push(e.to_string());
-                "".to_string()
-            }
-        };
+        let access_token_secret_string =
+            match parse_required_env_variable::<String>("ACCESS_TOKEN_SECRET") {
+                Ok(v) => v,
+                Err(e) => {
+                    errors.push(e.to_string());
+                    "".to_string()
+                }
+            };
+        let access_token_secret: [u8; 32] =
+            match BASE64_STANDARD_NO_PAD.decode(access_token_secret_string) {
+                Ok(v) => {
+                    if v.len() != 32 {
+                        errors.push("invalid size for ACCESS_TOKEN_SECRET".into());
+                        [0u8; 32]
+                    } else {
+                        let mut a = [0; 32];
+                        a.clone_from_slice(&v);
+                        a
+                    }
+                }
+                Err(e) => {
+                    errors.push(e.to_string());
+                    [0u8; 32]
+                }
+            };
 
         if !errors.is_empty() {
             return Err(anyhow::anyhow!(errors.join(", ")));

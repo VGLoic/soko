@@ -19,7 +19,7 @@ pub use repository::{AccessTokenRepository, PostgresAccessTokenRepository};
 
 use super::{AppState, newtypes::Password};
 
-pub fn tokens_router(access_token_secret: Opaque<String>) -> Router<AppState> {
+pub fn tokens_router(access_token_secret: Opaque<[u8; 32]>) -> Router<AppState> {
     Router::new().route(
         "/",
         post(create_access_token.layer(Extension(access_token_secret))),
@@ -65,7 +65,7 @@ pub struct AccessTokenCreatedResponse {
 
 async fn create_access_token(
     State(app_state): State<AppState>,
-    Extension(access_token_secret): Extension<Opaque<String>>,
+    Extension(access_token_secret): Extension<Opaque<[u8; 32]>>,
     ValidatedJson(body): ValidatedJson<CreateAccessTokenBody>,
 ) -> Result<(StatusCode, Json<AccessTokenCreatedResponse>), ApiError> {
     let account = app_state

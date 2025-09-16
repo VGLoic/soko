@@ -2,7 +2,6 @@ use std::{collections::HashMap, net::SocketAddr, sync::Arc, time::Duration};
 
 use anyhow::anyhow;
 use async_trait::async_trait;
-use base64::prelude::*;
 use fake::{Dummy, Fake, faker};
 use serde::Serialize;
 use soko::{
@@ -81,7 +80,7 @@ pub async fn setup() -> Result<TestState, anyhow::Error> {
         port: 0,
         log_level: Level::TRACE,
         database_url: Opaque::new(INTEGRATION_DATABASE_URL.to_string()),
-        access_token_secret: Opaque::new(BASE64_STANDARD_NO_PAD.encode("hello-world")),
+        access_token_secret: Opaque::new(rand::random()),
     };
 
     let pool = PgPoolOptions::new()

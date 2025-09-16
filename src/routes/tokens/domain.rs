@@ -82,7 +82,7 @@ impl CreateAccessTokenRequest {
     pub fn try_from_body(
         body: CreateAccessTokenBody,
         account: &Account,
-        hmac_secret: Opaque<String>,
+        hmac_secret: Opaque<[u8; 32]>,
     ) -> Result<Self, CreateAccessTokenRequestError> {
         if body.password.verify(&account.password_hash).is_err() {
             return Err(CreateAccessTokenRequestError::InvalidPassword);
@@ -106,10 +106,8 @@ impl CreateAccessTokenRequest {
         let mut rng = rand_chacha::ChaCha20Rng::from_os_rng();
         let token_bytes: [u8; 64] = rng.random();
         let token = format!("soko__{}", BASE64_STANDARD_NO_PAD.encode(token_bytes));
-        let secret = BASE64_STANDARD_NO_PAD
-            .decode(hmac_secret.extract_inner())
-            .map_err(|e| anyhow!(e).context("failed to decode hmac secret value from base64"))?;
-        let mut hmac = Hmac::<Sha3_256>::new_from_slice(&secret)
+
+        let mut hmac = Hmac::<Sha3_256>::new_from_slice(hmac_secret.extract_inner())
             .map_err(|e| anyhow!(e).context("failed to initialize hmac"))?;
         hmac.update(token.as_bytes());
         let mac = hmac.finalize().into_bytes().into();
@@ -148,11 +146,8 @@ mod create_access_token_tests {
             lifetime: 3600, // 1 hour
         };
 
-        let result = CreateAccessTokenRequest::try_from_body(
-            body,
-            &account,
-            Opaque::new("test-hmac-secret".into()),
-        );
+        let result =
+            CreateAccessTokenRequest::try_from_body(body, &account, Opaque::new(rand::random()));
 
         assert!(matches!(
             result,
@@ -173,11 +168,8 @@ mod create_access_token_tests {
             lifetime: 3600, // 1 hour
         };
 
-        let result = CreateAccessTokenRequest::try_from_body(
-            body,
-            &account,
-            Opaque::new("test-hmac-secret".into()),
-        );
+        let result =
+            CreateAccessTokenRequest::try_from_body(body, &account, Opaque::new(rand::random()));
 
         assert!(matches!(
             result,
@@ -198,11 +190,8 @@ mod create_access_token_tests {
             lifetime: 3600, // 1 hour
         };
 
-        let result = CreateAccessTokenRequest::try_from_body(
-            body,
-            &account,
-            Opaque::new("test-hmac-secret".into()),
-        );
+        let result =
+            CreateAccessTokenRequest::try_from_body(body, &account, Opaque::new(rand::random()));
 
         assert!(matches!(
             result,
@@ -226,11 +215,8 @@ mod create_access_token_tests {
             lifetime: 3600, // 1 hour
         };
 
-        let result = CreateAccessTokenRequest::try_from_body(
-            body,
-            &account,
-            Opaque::new("test-hmac-secret".into()),
-        );
+        let result =
+            CreateAccessTokenRequest::try_from_body(body, &account, Opaque::new(rand::random()));
 
         assert!(matches!(
             result,
@@ -251,11 +237,8 @@ mod create_access_token_tests {
             lifetime: 0,
         };
 
-        let result = CreateAccessTokenRequest::try_from_body(
-            body,
-            &account,
-            Opaque::new("test-hmac-secret".into()),
-        );
+        let result =
+            CreateAccessTokenRequest::try_from_body(body, &account, Opaque::new(rand::random()));
 
         assert!(matches!(
             result,
@@ -276,11 +259,8 @@ mod create_access_token_tests {
             lifetime: MAX_LIFETIME + 1,
         };
 
-        let result = CreateAccessTokenRequest::try_from_body(
-            body,
-            &account,
-            Opaque::new("test-hmac-secret".into()),
-        );
+        let result =
+            CreateAccessTokenRequest::try_from_body(body, &account, Opaque::new(rand::random()));
 
         assert!(matches!(
             result,
