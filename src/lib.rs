@@ -12,6 +12,7 @@ pub struct Config {
     pub port: u16,
     pub log_level: Level,
     pub database_url: String,
+    pub access_token_secret: String,
 }
 
 impl Config {
@@ -42,6 +43,15 @@ impl Config {
             }
         };
 
+        let access_token_secret = match parse_required_env_variable::<String>("ACCESS_TOKEN_SECRET")
+        {
+            Ok(v) => v,
+            Err(e) => {
+                errors.push(e.to_string());
+                "".to_string()
+            }
+        };
+
         if !errors.is_empty() {
             return Err(anyhow::anyhow!(errors.join(", ")));
         }
@@ -49,6 +59,7 @@ impl Config {
             port,
             log_level,
             database_url,
+            access_token_secret,
         })
     }
 }

@@ -19,7 +19,7 @@ pub use accounts::{AccountRepository, AccountResponse, PostgresAccountRepository
 pub use tokens::{AccessTokenRepository, PostgresAccessTokenRepository};
 
 pub fn app_router(
-    _: &Config,
+    config: &Config,
     account_repository: impl AccountRepository + 'static,
     access_token_repository: impl AccessTokenRepository + 'static,
     mailing_service: impl MailingService + 'static,
@@ -31,7 +31,10 @@ pub fn app_router(
     };
     Router::new()
         .nest("/accounts", accounts::accounts_router())
-        .nest("/tokens", tokens::tokens_router())
+        .nest(
+            "/tokens",
+            tokens::tokens_router(config.access_token_secret.to_string()),
+        )
         .route("/health", get(get_healthcheck))
         .fallback(not_found_handler)
         .with_state(app_state)

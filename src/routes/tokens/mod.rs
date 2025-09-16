@@ -1,4 +1,6 @@
-use axum::{Json, Router, extract::State, http::StatusCode, routing::post};
+use axum::{
+    Extension, Json, Router, extract::State, handler::Handler, http::StatusCode, routing::post,
+};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use validator::{Validate, ValidationError, ValidationErrors};
@@ -18,8 +20,12 @@ use super::{
     newtypes::{OpaqueToken, Password},
 };
 
-pub fn tokens_router() -> Router<AppState> {
-    Router::new().route("/", post(create_access_token))
+// REMIND ME
+pub fn tokens_router(access_token_secret: String) -> Router<AppState> {
+    Router::new().route(
+        "/",
+        post(create_access_token.layer(Extension(access_token_secret))),
+    )
 }
 
 // ############################################
@@ -61,6 +67,7 @@ pub struct AccessTokenCreatedResponse {
 
 async fn create_access_token(
     State(app_state): State<AppState>,
+    Extension(access_token_secret): Extension<String>,
     ValidatedJson(body): ValidatedJson<CreateAccessTokenBody>,
 ) -> Result<(StatusCode, Json<AccessTokenCreatedResponse>), ApiError> {
     let account = app_state
@@ -68,7 +75,8 @@ async fn create_access_token(
         .get_verified_account_by_email(&body.email)
         .await?;
 
-    let req = CreateAccessTokenRequest::try_from_body(body, &account, "coucou I am a secret")?;
+    let req =
+        CreateAccessTokenRequest::try_from_body(body, &account, access_token_secret.as_str())?;
 
     let access_token = app_state
         .access_token_repository
