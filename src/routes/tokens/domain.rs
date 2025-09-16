@@ -47,6 +47,7 @@ pub struct AccessToken {
 
 pub const MAX_LIFETIME: u32 = 90 * 24 * 60 * 60; // 90 days
 pub const MAX_ACTIVE_TOKENS: u8 = 3;
+pub const MAX_NAME_LENGTH: usize = 40;
 
 #[derive(Clone, Debug)]
 pub struct CreateAccessTokenRequest {
@@ -91,7 +92,7 @@ impl CreateAccessTokenRequest {
         if trimmed_name.is_empty() {
             return Err(CreateAccessTokenRequestError::InvalidName);
         }
-        if trimmed_name.len() > 40 {
+        if trimmed_name.len() > MAX_NAME_LENGTH {
             return Err(CreateAccessTokenRequestError::InvalidName);
         }
 
@@ -216,7 +217,7 @@ mod create_access_token_tests {
         account.password_hash = password.hash().unwrap();
 
         // Create a name longer than 40 characters
-        let long_name = "a".repeat(41);
+        let long_name = "a".repeat(MAX_NAME_LENGTH + 1);
 
         let body = CreateAccessTokenBody {
             email: account.email.clone(),

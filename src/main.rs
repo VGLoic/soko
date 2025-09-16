@@ -8,7 +8,9 @@ use axum::{
 use dotenvy::dotenv;
 use soko::{
     Config,
-    routes::{PostgresAccessTokenRepository, PostgresAccountRepository, app_router},
+    routes::{
+        accounts::PostgresAccountRepository, app_router, tokens::PostgresAccessTokenRepository,
+    },
     third_party::ToBeImplementedMailingService,
 };
 use sqlx::postgres::PgPoolOptions;

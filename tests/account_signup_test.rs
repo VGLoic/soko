@@ -1,6 +1,6 @@
 use fake::{Fake, Faker};
 use reqwest::StatusCode;
-use soko::routes::AccountResponse;
+use soko::routes::accounts::AccountResponse;
 
 use crate::common::{TestSignupBody, TestVerifyAccountBody};
 

@@ -3,6 +3,7 @@ use chrono::{DateTime, Utc};
 use fake::{Fake, Faker};
 use reqwest::StatusCode;
 use serde::Deserialize;
+use soko::routes::tokens::{MAX_LIFETIME, MAX_NAME_LENGTH};
 
 mod common;
 
@@ -53,8 +54,8 @@ async fn test_access_token_creation() {
     let create_access_token_body = TestCreateAccessTokenBody {
         email: signup_body.email.clone(),
         password: signup_body.password.clone(),
-        name: (1..40).fake(),
-        lifetime: (1..(90 * 24 * 3600)).fake(),
+        name: (1..MAX_NAME_LENGTH).fake(),
+        lifetime: (1..MAX_LIFETIME).fake(),
     };
     let response = client
         .post(format!("{}/tokens", &test_state.server_url))
@@ -109,8 +110,8 @@ async fn test_create_too_many_access_tokens() {
         let create_access_token_body = TestCreateAccessTokenBody {
             email: signup_body.email.clone(),
             password: signup_body.password.clone(),
-            name: (1..40).fake(),
-            lifetime: (1..(90 * 24 * 3600)).fake(),
+            name: (1..MAX_NAME_LENGTH).fake(),
+            lifetime: (1..MAX_LIFETIME).fake(),
         };
         let response = client
             .post(format!("{}/tokens", &test_state.server_url))
@@ -125,8 +126,8 @@ async fn test_create_too_many_access_tokens() {
     let create_access_token_body = TestCreateAccessTokenBody {
         email: signup_body.email.clone(),
         password: signup_body.password.clone(),
-        name: (1..40).fake(),
-        lifetime: (1..(90 * 24 * 3600)).fake(),
+        name: (1..MAX_NAME_LENGTH).fake(),
+        lifetime: (1..MAX_LIFETIME).fake(),
     };
     let response = client
         .post(format!("{}/tokens", &test_state.server_url))

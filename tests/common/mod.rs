@@ -8,7 +8,9 @@ use serde::Serialize;
 use soko::{
     Config,
     newtypes::{Email, OpaqueString},
-    routes::{PostgresAccessTokenRepository, PostgresAccountRepository, app_router},
+    routes::{
+        accounts::PostgresAccountRepository, app_router, tokens::PostgresAccessTokenRepository,
+    },
     third_party::MailingService,
 };
 use sqlx::postgres::PgPoolOptions;

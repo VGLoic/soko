@@ -12,6 +12,8 @@ use domain::{
     CreateAccessTokenError, CreateAccessTokenRequest, CreateAccessTokenRequestError,
     MAX_ACTIVE_TOKENS, TokenQueryError,
 };
+pub use domain::{MAX_LIFETIME, MAX_NAME_LENGTH};
+
 mod repository;
 pub use repository::{AccessTokenRepository, PostgresAccessTokenRepository};
 
