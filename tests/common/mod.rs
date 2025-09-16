@@ -7,7 +7,7 @@ use fake::{Dummy, Fake, faker};
 use serde::Serialize;
 use soko::{
     Config,
-    newtypes::Email,
+    newtypes::{Email, OpaqueString},
     routes::{PostgresAccessTokenRepository, PostgresAccountRepository, app_router},
     third_party::MailingService,
 };
@@ -78,14 +78,14 @@ pub async fn setup() -> Result<TestState, anyhow::Error> {
     let config = Config {
         port: 0,
         log_level: Level::TRACE,
-        database_url: INTEGRATION_DATABASE_URL.to_string(),
-        access_token_secret: BASE64_STANDARD.encode("hello-world"),
+        database_url: OpaqueString::new(INTEGRATION_DATABASE_URL.to_string()),
+        access_token_secret: OpaqueString::new(BASE64_STANDARD_NO_PAD.encode("hello-world")),
     };
 
     let pool = PgPoolOptions::new()
         .max_connections(5)
         .acquire_timeout(Duration::from_secs(5))
-        .connect(&config.database_url)
+        .connect(config.database_url.extract_inner())
         .await
         .map_err(|e| anyhow::anyhow!("Failed to establish connection to database: {e}"))?;
 

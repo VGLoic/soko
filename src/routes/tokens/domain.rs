@@ -7,7 +7,7 @@ use sha3::Sha3_256;
 use sqlx::prelude::FromRow;
 use thiserror::Error;
 
-use crate::routes::{accounts::Account, newtypes::OpaqueToken};
+use crate::{OpaqueString, routes::accounts::Account};
 
 use super::CreateAccessTokenBody;
 
@@ -52,7 +52,7 @@ pub const MAX_ACTIVE_TOKENS: u8 = 3;
 pub struct CreateAccessTokenRequest {
     pub account_id: uuid::Uuid,
     pub name: String,
-    pub token: OpaqueToken,
+    pub token: OpaqueString,
     pub mac: [u8; 32],
     pub expires_at: DateTime<Utc>,
 }
@@ -81,7 +81,7 @@ impl CreateAccessTokenRequest {
     pub fn try_from_body(
         body: CreateAccessTokenBody,
         account: &Account,
-        hmac_secret: &str,
+        hmac_secret: OpaqueString,
     ) -> Result<Self, CreateAccessTokenRequestError> {
         if body.password.verify(&account.password_hash).is_err() {
             return Err(CreateAccessTokenRequestError::InvalidPassword);
@@ -105,7 +105,10 @@ impl CreateAccessTokenRequest {
         let mut rng = rand_chacha::ChaCha20Rng::from_os_rng();
         let token_bytes: [u8; 64] = rng.random();
         let token = format!("soko__{}", BASE64_STANDARD_NO_PAD.encode(token_bytes));
-        let mut hmac = Hmac::<Sha3_256>::new_from_slice(hmac_secret.as_bytes())
+        let secret = BASE64_STANDARD_NO_PAD
+            .decode(hmac_secret.extract_inner())
+            .map_err(|e| anyhow!(e).context("failed to decode hmac secret value from base64"))?;
+        let mut hmac = Hmac::<Sha3_256>::new_from_slice(&secret)
             .map_err(|e| anyhow!(e).context("failed to initialize hmac"))?;
         hmac.update(token.as_bytes());
         let mac = hmac.finalize().into_bytes().into();
@@ -117,7 +120,7 @@ impl CreateAccessTokenRequest {
         Ok(CreateAccessTokenRequest {
             account_id: account.id,
             name: trimmed_name.to_string(),
-            token: OpaqueToken::new(&token),
+            token: OpaqueString::new(token),
             mac,
             expires_at,
         })
@@ -128,14 +131,14 @@ impl CreateAccessTokenRequest {
 mod create_access_token_tests {
     use fake::{Fake, Faker};
 
-    use crate::routes::accounts::Account;
+    use crate::routes::{accounts::Account, newtypes::Password};
 
     use super::*;
 
     #[test]
     fn test_try_from_body_with_invalid_password() {
         let account: Account = Faker.fake();
-        let wrong_password: crate::routes::newtypes::Password = Faker.fake();
+        let wrong_password: Password = Faker.fake();
 
         let body = CreateAccessTokenBody {
             email: account.email.clone(),
@@ -144,7 +147,11 @@ mod create_access_token_tests {
             lifetime: 3600, // 1 hour
         };
 
-        let result = CreateAccessTokenRequest::try_from_body(body, &account, "test-hmac-secret");
+        let result = CreateAccessTokenRequest::try_from_body(
+            body,
+            &account,
+            OpaqueString::new("test-hmac-secret".into()),
+        );
 
         assert!(matches!(
             result,
@@ -155,7 +162,7 @@ mod create_access_token_tests {
     #[test]
     fn test_try_from_body_with_empty_name() {
         let mut account: Account = Faker.fake();
-        let password: crate::routes::newtypes::Password = Faker.fake();
+        let password: Password = Faker.fake();
         account.password_hash = password.hash().unwrap();
 
         let body = CreateAccessTokenBody {
@@ -165,7 +172,11 @@ mod create_access_token_tests {
             lifetime: 3600, // 1 hour
         };
 
-        let result = CreateAccessTokenRequest::try_from_body(body, &account, "test-hmac-secret");
+        let result = CreateAccessTokenRequest::try_from_body(
+            body,
+            &account,
+            OpaqueString::new("test-hmac-secret".into()),
+        );
 
         assert!(matches!(
             result,
@@ -176,7 +187,7 @@ mod create_access_token_tests {
     #[test]
     fn test_try_from_body_with_whitespace_only_name() {
         let mut account: Account = Faker.fake();
-        let password: crate::routes::newtypes::Password = Faker.fake();
+        let password: Password = Faker.fake();
         account.password_hash = password.hash().unwrap();
 
         let body = CreateAccessTokenBody {
@@ -186,7 +197,11 @@ mod create_access_token_tests {
             lifetime: 3600, // 1 hour
         };
 
-        let result = CreateAccessTokenRequest::try_from_body(body, &account, "test-hmac-secret");
+        let result = CreateAccessTokenRequest::try_from_body(
+            body,
+            &account,
+            OpaqueString::new("test-hmac-secret".into()),
+        );
 
         assert!(matches!(
             result,
@@ -197,7 +212,7 @@ mod create_access_token_tests {
     #[test]
     fn test_try_from_body_with_name_too_long() {
         let mut account: Account = Faker.fake();
-        let password: crate::routes::newtypes::Password = Faker.fake();
+        let password: Password = Faker.fake();
         account.password_hash = password.hash().unwrap();
 
         // Create a name longer than 40 characters
@@ -210,7 +225,11 @@ mod create_access_token_tests {
             lifetime: 3600, // 1 hour
         };
 
-        let result = CreateAccessTokenRequest::try_from_body(body, &account, "test-hmac-secret");
+        let result = CreateAccessTokenRequest::try_from_body(
+            body,
+            &account,
+            OpaqueString::new("test-hmac-secret".into()),
+        );
 
         assert!(matches!(
             result,
@@ -221,7 +240,7 @@ mod create_access_token_tests {
     #[test]
     fn test_try_from_body_with_zero_lifetime() {
         let mut account: Account = Faker.fake();
-        let password: crate::routes::newtypes::Password = Faker.fake();
+        let password: Password = Faker.fake();
         account.password_hash = password.hash().unwrap();
 
         let body = CreateAccessTokenBody {
@@ -231,7 +250,11 @@ mod create_access_token_tests {
             lifetime: 0,
         };
 
-        let result = CreateAccessTokenRequest::try_from_body(body, &account, "test-hmac-secret");
+        let result = CreateAccessTokenRequest::try_from_body(
+            body,
+            &account,
+            OpaqueString::new("test-hmac-secret".into()),
+        );
 
         assert!(matches!(
             result,
@@ -242,7 +265,7 @@ mod create_access_token_tests {
     #[test]
     fn test_try_from_body_with_lifetime_too_big() {
         let mut account: Account = Faker.fake();
-        let password: crate::routes::newtypes::Password = Faker.fake();
+        let password: Password = Faker.fake();
         account.password_hash = password.hash().unwrap();
 
         let body = CreateAccessTokenBody {
@@ -252,7 +275,11 @@ mod create_access_token_tests {
             lifetime: MAX_LIFETIME + 1,
         };
 
-        let result = CreateAccessTokenRequest::try_from_body(body, &account, "test-hmac-secret");
+        let result = CreateAccessTokenRequest::try_from_body(
+            body,
+            &account,
+            OpaqueString::new("test-hmac-secret".into()),
+        );
 
         assert!(matches!(
             result,

@@ -5,7 +5,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use validator::{Validate, ValidationError, ValidationErrors};
 
-use crate::newtypes::Email;
+use crate::newtypes::{Email, OpaqueString};
 mod domain;
 use super::{ApiError, ValidatedJson};
 use domain::{
@@ -15,13 +15,9 @@ use domain::{
 mod repository;
 pub use repository::{AccessTokenRepository, PostgresAccessTokenRepository};
 
-use super::{
-    AppState,
-    newtypes::{OpaqueToken, Password},
-};
+use super::{AppState, newtypes::Password};
 
-// REMIND ME
-pub fn tokens_router(access_token_secret: String) -> Router<AppState> {
+pub fn tokens_router(access_token_secret: OpaqueString) -> Router<AppState> {
     Router::new().route(
         "/",
         post(create_access_token.layer(Extension(access_token_secret))),
@@ -58,7 +54,7 @@ pub struct CreateAccessTokenBody {
 pub struct AccessTokenCreatedResponse {
     pub id: uuid::Uuid,
     pub name: String,
-    pub access_token: OpaqueToken,
+    pub access_token: OpaqueString,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
@@ -67,7 +63,7 @@ pub struct AccessTokenCreatedResponse {
 
 async fn create_access_token(
     State(app_state): State<AppState>,
-    Extension(access_token_secret): Extension<String>,
+    Extension(access_token_secret): Extension<OpaqueString>,
     ValidatedJson(body): ValidatedJson<CreateAccessTokenBody>,
 ) -> Result<(StatusCode, Json<AccessTokenCreatedResponse>), ApiError> {
     let account = app_state
@@ -75,8 +71,7 @@ async fn create_access_token(
         .get_verified_account_by_email(&body.email)
         .await?;
 
-    let req =
-        CreateAccessTokenRequest::try_from_body(body, &account, access_token_secret.as_str())?;
+    let req = CreateAccessTokenRequest::try_from_body(body, &account, access_token_secret)?;
 
     let access_token = app_state
         .access_token_repository

@@ -33,7 +33,7 @@ pub fn app_router(
         .nest("/accounts", accounts::accounts_router())
         .nest(
             "/tokens",
-            tokens::tokens_router(config.access_token_secret.to_string()),
+            tokens::tokens_router(config.access_token_secret.clone()),
         )
         .route("/health", get(get_healthcheck))
         .fallback(not_found_handler)

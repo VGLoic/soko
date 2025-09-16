@@ -6,32 +6,7 @@ use base64::{Engine, prelude::BASE64_STANDARD_NO_PAD};
 use fake::{Dummy, Fake, faker};
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
-use serde::{Deserialize, Serialize, de::Visitor};
-
-// ######################################################
-// #################### OPAQUE TOKEN ####################
-// ######################################################
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct OpaqueToken(String);
-
-impl OpaqueToken {
-    pub fn new(v: &str) -> Self {
-        Self(v.to_string())
-    }
-}
-
-impl std::fmt::Display for OpaqueToken {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "soko__*********")
-    }
-}
-
-impl Debug for OpaqueToken {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "soko__*********")
-    }
-}
+use serde::{Deserialize, de::Visitor};
 
 // ##################################################
 // #################### PASSWORD ####################

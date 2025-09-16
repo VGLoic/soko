@@ -4,6 +4,37 @@ use sqlx::{Database, Decode, Encode};
 use std::fmt::Debug;
 use validator::ValidateEmail;
 
+// #######################################################
+// #################### OPAQUE STRING ####################
+// #######################################################
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct OpaqueString(String);
+
+impl OpaqueString {
+    pub fn new(v: String) -> Self {
+        Self(v)
+    }
+
+    /// Extract the inner value to a reference.
+    /// Use it with caution
+    pub fn extract_inner(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for OpaqueString {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "*********")
+    }
+}
+
+impl Debug for OpaqueString {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "*********")
+    }
+}
+
 // ###############################################
 // #################### EMAIL ####################
 // ###############################################
